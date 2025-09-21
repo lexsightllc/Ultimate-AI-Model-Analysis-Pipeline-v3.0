@@ -112,7 +112,6 @@ class AnalysisConfig:
             self.dimensionality_reduction_components = int(self.dimensionality_reduction_components)
         if self.explained_variance is not None:
             self.explained_variance = float(self.explained_variance)
-        self._apply_performance_mode()
 
     @classmethod
     def from_file(cls, path: Path | str) -> "AnalysisConfig":
