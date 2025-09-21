@@ -1,9 +1,0 @@
-#!/usr/bin/env python3
-"""Project entrypoint delegating to :mod:`ultimate_pipeline.cli`."""
-from __future__ import annotations
-
-from ultimate_pipeline.cli import main
-
-
-if __name__ == "__main__":
-    main()
