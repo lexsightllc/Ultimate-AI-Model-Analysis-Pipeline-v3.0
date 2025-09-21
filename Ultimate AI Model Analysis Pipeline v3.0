@@ -23,31 +23,6 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.calibration import CalibratedClassifierCV
 
-#!/usr/bin/env python3
-"""
-Ultimate AI Model Analysis Pipeline v3.0
-Performance-optimized with accuracy/throughput switch
-"""
-
-import os
-import re
-import json
-import sys
-import time
-import warnings
-from pathlib import Path
-from typing import Tuple, Dict, Any, List, Union
-import numpy as np
-import pandas as pd
-from scipy.sparse import hstack, csr_matrix
-from sklearn.model_selection import GroupKFold, StratifiedKFold
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression, SGDClassifier
-from sklearn.metrics import roc_auc_score, brier_score_loss
-from sklearn.isotonic import IsotonicRegression
-from sklearn.preprocessing import StandardScaler
-from sklearn.calibration import CalibratedClassifierCV
-
 # --- Custom Exceptions ---
 class SingleClassError(Exception):
     """Raised when training data has only one class"""
@@ -214,9 +189,9 @@ def make_synthetic_data(work_dir: Path, n_train=5000, n_test=1000) -> Tuple[Path
         toks = rng.choice(vocab, size=rng.integers(15, 100)).tolist()
         
         # Introduce meaningful patterns
-        if rng.random() < 0.3: 
+        if rng.random() < 0.3:
             spam_triggers = ["spam", "promo", "discount", "free", "offer", "click", "link"]
-            toks += rng.choice(spam_triggers, size=rng.integers(3, 8))
+            toks.extend(rng.choice(spam_triggers, size=rng.integers(3, 8)).tolist())
         
         row = {
             "row_id": i if is_train else i + n_train,
@@ -482,7 +457,9 @@ def extract_feature_importance(models, word_vec, char_vec):
         "positive": [{"name": features[i], "weight": float(avg_coef[i])} for i in top_pos],
         "negative": [{"name": features[i], "weight": float(avg_coef[i])} for i in top_neg]
     }
-  def generate_dashboard(metrics, feature_importance, predictions, output_path):
+
+
+def generate_dashboard(metrics, feature_importance, predictions, output_path):
     """Generate professional HTML dashboard"""
     predictions_js = json.dumps(predictions).replace("</", "<\\/")
 
@@ -616,8 +593,8 @@ def extract_feature_importance(models, word_vec, char_vec):
             function downloadCSV() {{
                 const data = JSON.parse(document.getElementById('predictions-data').textContent);
                 let csv = 'row_id,rule_violation\\n';
-                data.forEach(row => {{ 
-                    csv += `${row.row_id},${row.rule_violation}\\n`;
+                data.forEach(row => {{
+                    csv += `${{row.row_id}},${{row.rule_violation}}\\n`;
                 }});
                 const blob = new Blob([csv], {{ type: 'text/csv' }});
                 const url = URL.createObjectURL(blob);
@@ -734,9 +711,6 @@ def main():
         print(f"❌ Unexpected error: {str(e)}")
         import traceback
         traceback.print_exc()
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()
