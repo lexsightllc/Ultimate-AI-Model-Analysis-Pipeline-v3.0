@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Legacy entrypoint preserved for backwards compatibility."""
+"""Compat shim to launch the Ultimate AI Model Analysis pipeline package."""
 from __future__ import annotations
 
 import sys

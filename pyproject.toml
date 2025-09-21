@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ultimate-pipeline"
+version = "3.1.0"
+description = "Ultimate AI Model Analysis Pipeline"
+authors = [{name = "Ultimate AI", email = "dev@example.com"}]
+requires-python = ">=3.9"
+readme = "README.md"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "scipy",
+    "joblib",
+]
+
+[project.scripts]
+ultimate-pipeline = "ultimate_pipeline.cli:main"
