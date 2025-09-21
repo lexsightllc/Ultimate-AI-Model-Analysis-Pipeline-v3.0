@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -135,10 +134,6 @@ class AnalysisPipeline:
             "duration_seconds": duration,
         }
         save_json(summary_path, summary)
-        # Mirror high-value artefacts to working directory root for convenience
-        save_submission(Path(submission_path.name), row_ids, test_prediction)
-        save_dashboard(Path(dashboard_path.name), metrics)
-        save_json(Path(summary_path.name), summary)
 
         return PipelineResult(
             metrics=metrics,
