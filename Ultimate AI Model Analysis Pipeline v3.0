@@ -1,0 +1,743 @@
+#!/usr/bin/env python3
+"""
+Ultimate AI Model Analysis Pipeline v3.0
+Performance-optimized with accuracy/throughput switch
+"""
+
+import os
+import re
+import json
+import sys
+import time
+import warnings
+from pathlib import Path
+from typing import Tuple, Dict, Any, List, Union
+import numpy as np
+import pandas as pd
+from scipy.sparse import hstack, csr_matrix
+from sklearn.model_selection import GroupKFold, StratifiedKFold
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.metrics import roc_auc_score, brier_score_loss
+from sklearn.isotonic import IsotonicRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
+
+#!/usr/bin/env python3
+"""
+Ultimate AI Model Analysis Pipeline v3.0
+Performance-optimized with accuracy/throughput switch
+"""
+
+import os
+import re
+import json
+import sys
+import time
+import warnings
+from pathlib import Path
+from typing import Tuple, Dict, Any, List, Union
+import numpy as np
+import pandas as pd
+from scipy.sparse import hstack, csr_matrix
+from sklearn.model_selection import GroupKFold, StratifiedKFold
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.metrics import roc_auc_score, brier_score_loss
+from sklearn.isotonic import IsotonicRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
+
+# --- Custom Exceptions ---
+class SingleClassError(Exception):
+    """Raised when training data has only one class"""
+    pass
+
+class DataValidationError(Exception):
+    """Raised when input data fails validation checks"""
+    pass
+
+# --- Configuration Management ---
+class AnalysisConfig:
+    def __init__(self, params: Dict[str, Any] = None):
+        self.params = params or self.default_config()
+        self.apply_performance_mode()
+        np.random.seed(self.params["SEED"])
+        
+    @staticmethod
+    def default_config() -> Dict[str, Any]:
+        return {
+            "VERSION": "3.0.0",
+            "SEED": 42,
+            "PERFORMANCE_MODE": "balanced",  # balanced, best_accuracy, max_speed
+            "N_SPLITS_MAX": 5,
+            "MIN_GROUP_K_FOLDS": 3,
+            "MAX_TFIDF_FEATURES": 100_000,
+            "LR_C_VALUE": 1.0,
+            "LR_MAX_ITER": 1000,
+            "CALIBRATION_ENABLED": True,
+            "CALIBRATION_METHOD": "isotonic",
+            "EPSILON_PROB_CLIP": 1e-6,
+            "N_ECE_BINS": 10,
+            "TOP_N_FEATURES_DISPLAY": 15,
+            "TEXT_COLUMNS": [
+                "body", "rule", "subreddit", 
+                "positive_example_1", "positive_example_2",
+                "negative_example_1", "negative_example_2"
+            ],
+            "TEXT_PREFIXES": {
+                "rule": "rule:", "subreddit": "subreddit: r/",
+                "positive_example_1": "positive1:", "positive_example_2": "positive2:",
+                "negative_example_1": "negative1:", "negative_example_2": "negative2:",
+                "body": "comment:"
+            },
+            "TFIDF_WORD_PARAMS": {
+                "strip_accents": "unicode", "lowercase": True,
+                "ngram_range": (1, 2), 
+                "min_df": 3, 
+                "max_df": 0.95,
+                "sublinear_tf": True,
+                "dtype": np.float32
+            },
+            "TFIDF_CHAR_PARAMS": {
+                "strip_accents": None, "lowercase": False,
+                "analyzer": "char", "ngram_range": (3, 5), 
+                "min_df": 3, 
+                "max_df": 0.95, 
+                "sublinear_tf": True,
+                "dtype": np.float32
+            },
+            "LARGE_DATA_THRESHOLD": 10000,
+            "BATCH_SIZE": 2000,
+            "N_JOBS": -1,
+            "EARLY_STOPPING": True,
+            "PATIENCE": 5,
+            "TOL": 1e-4
+        }
+    
+    def apply_performance_mode(self):
+        """Apply performance-specific optimizations"""
+        mode = self.params["PERFORMANCE_MODE"]
+        
+        if mode == "best_accuracy":
+            # Best accuracy configuration
+            self.params.update({
+                "MAX_TFIDF_FEATURES": 300_000,
+                "TFIDF_WORD_PARAMS": {
+                    **self.params["TFIDF_WORD_PARAMS"],
+                    "ngram_range": (1, 3),
+                    "min_df": 2
+                },
+                "TFIDF_CHAR_PARAMS": {
+                    **self.params["TFIDF_CHAR_PARAMS"],
+                    "ngram_range": (2, 6),
+                    "min_df": 2
+                },
+                "LR_MAX_ITER": 3000,
+                "CALIBRATION_METHOD": "sigmoid",
+                "USE_SGD": False,
+                "EARLY_STOPPING": False
+            })
+        elif mode == "max_speed":
+            # Maximum speed configuration
+            self.params.update({
+                "MAX_TFIDF_FEATURES": 50_000,
+                "TFIDF_WORD_PARAMS": {
+                    **self.params["TFIDF_WORD_PARAMS"],
+                    "ngram_range": (1, 1),
+                    "min_df": 5
+                },
+                "TFIDF_CHAR_PARAMS": {
+                    **self.params["TFIDF_CHAR_PARAMS"],
+                    "ngram_range": (3, 4),
+                    "min_df": 5
+                },
+                "USE_SGD": True,
+                "CALIBRATION_ENABLED": False,
+                "N_SPLITS_MAX": 3,
+                "BATCH_SIZE": 5000
+            })
+        else:  # balanced
+            # Balanced default configuration
+            self.params["USE_SGD"] = self.params.get("LARGE_DATA_THRESHOLD", 10000) > 5000
+    
+    def update(self, new_params: Dict[str, Any]):
+        self.params.update(new_params)
+        self.apply_performance_mode()
+        np.random.seed(self.params["SEED"])
+        
+    def to_ts_interface(self) -> Dict[str, Any]:
+        return {
+            "performanceMode": self.params["PERFORMANCE_MODE"],
+            "nSplits": self.params["N_SPLITS_MAX"],
+            "maxTfidfFeatures": self.params["MAX_TFIDF_FEATURES"],
+            "calibrationEnabled": self.params["CALIBRATION_ENABLED"]
+        }
+
+CONFIG = AnalysisConfig()
+warnings.filterwarnings("ignore")
+
+# ------------------ Core Pipeline Functions ------------------
+def get_data_paths() -> Tuple[Path, Path, Path, Path, bool]:
+    work_dir = Path.cwd()
+    input_dirs = [Path("/kaggle/input"), Path("/mnt/data"), Path.cwd()]
+    input_dir = next((d for d in input_dirs if d.exists()), Path.cwd())
+    if Path("/kaggle/working").exists(): 
+        work_dir = Path("/kaggle/working")
+    
+    def find_file(fname: str) -> Path:
+        for base in [input_dir] + [p for p in input_dir.iterdir() if p.is_dir()]:
+            candidate = base / fname
+            if candidate.exists():
+                return candidate
+        return None
+
+    train_path, test_path = find_file("train.csv"), find_file("test.csv")
+    sample_path = find_file("sample_submission.csv")
+    is_synthetic = not all([train_path, test_path, sample_path])
+    
+    if is_synthetic: 
+        print("Generating synthetic data...")
+        train_path, test_path, sample_path = make_synthetic_data(work_dir)
+        
+    return train_path, test_path, sample_path, work_dir, is_synthetic
+
+def make_synthetic_data(work_dir: Path, n_train=5000, n_test=1000) -> Tuple[Path, Path, Path]:
+    rng = np.random.default_rng(CONFIG.params["SEED"])
+    rules = [f"Rule_{i+1}" for i in range(10)]
+    subs = [f"Subreddit_{chr(65+i)}" for i in range(8)]
+    vocab = ["help", "urgent", "spam", "hate", "friendly", "ban", "policy", "violation", 
+             "content", "moderate", "community", "guidelines", "respect", "remove"]
+    
+    def create_row(i: int, is_train: bool) -> dict:
+        r, sr = rng.choice(rules), rng.choice(subs)
+        toks = rng.choice(vocab, size=rng.integers(15, 100)).tolist()
+        
+        # Introduce meaningful patterns
+        if rng.random() < 0.3: 
+            spam_triggers = ["spam", "promo", "discount", "free", "offer", "click", "link"]
+            toks += rng.choice(spam_triggers, size=rng.integers(3, 8))
+        
+        row = {
+            "row_id": i if is_train else i + n_train,
+            "body": " ".join(toks),
+            "rule": r,
+            "subreddit": sr,
+            "positive_example_1": "Example of constructive community engagement",
+            "positive_example_2": "Respectful discussion following guidelines",
+            "negative_example_1": "Explicit content violating platform policies",
+            "negative_example_2": "Spammy promotional content with malicious links",
+        }
+        
+        if is_train:
+            base_prob = 0.25 + 0.5 * (rules.index(r) / max(1, len(rules) - 1))
+            if any(w in toks for w in ["spam", "promo", "free", "click"]):
+                base_prob = min(0.9, base_prob + 0.3)
+            row["rule_violation"] = int(rng.random() < base_prob)
+        return row
+
+    # Efficient DataFrame creation
+    train_df = pd.DataFrame([create_row(i, True) for i in range(n_train)])
+    test_df = pd.DataFrame([create_row(i, False) for i in range(n_test)])
+    sample_df = pd.DataFrame({"row_id": test_df["row_id"], "rule_violation": 0.0})
+    
+    paths = [
+        work_dir / "train.csv",
+        work_dir / "test.csv",
+        work_dir / "sample_submission.csv"
+    ]
+    
+    for df, path in zip([train_df, test_df, sample_df], paths):
+        df.to_csv(path, index=False)
+    
+    return paths
+
+def preprocess_dataframes(train_df: pd.DataFrame, test_df: pd.DataFrame):
+    # Validate input data
+    required_cols = set(CONFIG.params["TEXT_COLUMNS"] + ["rule_violation"])
+    missing_cols = [col for col in required_cols if col not in train_df.columns]
+    if missing_cols:
+        raise DataValidationError(f"Training data missing columns: {missing_cols}")
+    
+    # Fill missing values
+    for df in [train_df, test_df]:
+        for col in CONFIG.params["TEXT_COLUMNS"]:
+            if col not in df.columns:
+                df[col] = ""
+            df[col] = df[col].fillna("").astype(str)
+    
+    # Compose text features
+    def compose_text(row: pd.Series) -> str:
+        parts = []
+        for col in CONFIG.params["TEXT_COLUMNS"]:
+            text = row[col].strip()
+            if text:
+                prefix = CONFIG.params["TEXT_PREFIXES"].get(col, f"{col}:")
+                parts.append(f"{prefix}{text}" if col == "subreddit" else f"{prefix} {text}")
+        return "\n".join(parts)
+    
+    train_text = train_df.apply(compose_text, axis=1)
+    test_text = test_df.apply(compose_text, axis=1)
+    y = train_df["rule_violation"].astype(int).values
+    groups = train_df.get("rule", "").astype(str).values
+    
+    # Handle single-class scenario
+    if len(np.unique(y)) < 2:
+        const_pred = float(y[0])
+        pd.DataFrame({
+            "row_id": test_df.get("row_id", np.arange(len(test_df))),
+            "rule_violation": np.full(len(test_df), const_pred)
+        }).to_csv("submission.csv", index=False)
+        raise SingleClassError("Training data has only one class")
+    
+    return train_df, test_df, train_text, test_text, y, groups
+
+def extract_features(train_text: pd.Series, test_text: pd.Series, 
+                    train_body: pd.Series, test_body: pd.Series):
+    """Feature engineering with performance optimizations"""
+    # Compute meta-features
+    def compute_meta(s: pd.Series):
+        s = s.fillna("").astype(str)
+        lengths = s.str.len().values
+        punct = s.apply(lambda x: len(re.findall(r"[^\w\s]", x))).values
+        caps = s.apply(lambda x: len(re.findall(r"[A-Z]", x)))
+        letters = s.apply(lambda x: len(re.findall(r"[A-Za-z]", x)))
+        caps_ratio = np.divide(caps, np.maximum(letters, 1), out=np.zeros_like(caps), where=letters>0)
+        words = s.apply(lambda x: len(x.split())).values
+        return lengths, punct, caps_ratio, words
+    
+    tr_len, tr_punct, tr_caps, tr_words = compute_meta(train_body)
+    te_len, te_punct, te_caps, te_words = compute_meta(test_body)
+    
+    # Scale meta-features
+    scaler = StandardScaler()
+    train_meta = scaler.fit_transform(np.vstack([
+        np.log1p(tr_len), np.log1p(tr_punct), tr_caps, np.log1p(tr_words)
+    ]).T)
+    
+    test_meta = scaler.transform(np.vstack([
+        np.log1p(te_len), np.log1p(te_punct), te_caps, np.log1p(te_words)
+    ]).T)
+    
+    # TF-IDF vectorization
+    word_vec = TfidfVectorizer(
+        max_features=CONFIG.params["MAX_TFIDF_FEATURES"], 
+        **CONFIG.params["TFIDF_WORD_PARAMS"]
+    )
+    char_vec = TfidfVectorizer(
+        max_features=CONFIG.params["MAX_TFIDF_FEATURES"], 
+        **CONFIG.params["TFIDF_CHAR_PARAMS"]
+    )
+    
+    # Transform text
+    print("Transforming text features...")
+    X_train = hstack([
+        word_vec.fit_transform(train_text),
+        char_vec.fit_transform(train_text),
+        csr_matrix(train_meta)
+    ], format="csr")
+    
+    X_test = hstack([
+        word_vec.transform(test_text),
+        char_vec.transform(test_text),
+        csr_matrix(test_meta)
+    ], format="csr")
+    
+    print(f"Feature matrix: Train={X_train.shape}, Test={X_test.shape}")
+    return X_train, X_test, word_vec, char_vec, scaler
+
+def get_cv_strategy(y: np.ndarray, groups: np.ndarray):
+    """Select optimal CV strategy"""
+    unique_groups, n_groups = np.unique(groups), len(np.unique(groups))
+    
+    if n_groups >= CONFIG.params["MIN_GROUP_K_FOLDS"]:
+        n_splits = min(CONFIG.params["N_SPLITS_MAX"], n_groups)
+        cv, strategy = GroupKFold(n_splits=n_splits), f"GroupKFold({n_splits})"
+    else:
+        class_counts = np.bincount(y)
+        min_class_count = np.min(class_counts) if class_counts.size > 0 else 0
+        n_splits = min(CONFIG.params["N_SPLITS_MAX"], max(2, min_class_count))
+        cv = StratifiedKFold(
+            n_splits=n_splits, 
+            shuffle=True, 
+            random_state=CONFIG.params["SEED"]
+        )
+        strategy = f"StratifiedKFold({n_splits})"
+    
+    print(f"CV Strategy: {strategy} | Groups: {n_groups}")
+    return cv, n_splits, strategy
+
+def create_model():
+    """Model factory with performance-optimized selection"""
+    if CONFIG.params.get("USE_SGD", False):
+        return SGDClassifier(
+            loss='log_loss',
+            penalty='elasticnet',
+            alpha=0.0001,
+            l1_ratio=0.15,
+            max_iter=CONFIG.params["LR_MAX_ITER"],
+            tol=CONFIG.params["TOL"],
+            learning_rate='optimal',
+            early_stopping=CONFIG.params["EARLY_STOPPING"],
+            n_iter_no_change=CONFIG.params["PATIENCE"],
+            random_state=CONFIG.params["SEED"]
+        )
+    else:
+        return LogisticRegression(
+            solver="saga",
+            penalty="l1",
+            C=CONFIG.params["LR_C_VALUE"],
+            class_weight="balanced",
+            max_iter=CONFIG.params["LR_MAX_ITER"],
+            tol=CONFIG.params["TOL"],
+            random_state=CONFIG.params["SEED"],
+            n_jobs=CONFIG.params["N_JOBS"]
+        )
+
+def train_model(X: csr_matrix, y: np.ndarray, X_test: csr_matrix, 
+               groups: np.ndarray, cv: Any, n_splits: int):
+    """High-performance training with calibration"""
+    oof_preds = np.zeros(len(y), dtype=np.float32)
+    test_preds = []
+    models = []
+    
+    for fold, (tr_idx, val_idx) in enumerate(cv.split(X, y, groups), 1):
+        start_time = time.time()
+        print(f"Fold {fold}/{n_splits} | Training on {len(tr_idx)} samples...")
+        
+        # Initialize and train model
+        model = create_model()
+        model.fit(X[tr_idx], y[tr_idx])
+        models.append(model)
+        
+        # Get probabilities
+        val_probs = model.predict_proba(X[val_idx])[:, 1]
+        test_probs = model.predict_proba(X_test)[:, 1]
+        
+        # Apply calibration
+        if CONFIG.params["CALIBRATION_ENABLED"]:
+            calib_method = CONFIG.params["CALIBRATION_METHOD"]
+            if calib_method == "isotonic":
+                calibrator = IsotonicRegression(out_of_bounds="clip")
+                calibrator.fit(val_probs, y[val_idx])
+                val_probs = calibrator.transform(val_probs)
+                test_probs = calibrator.transform(test_probs)
+            elif calib_method == "sigmoid":
+                calibrator = CalibratedClassifierCV(model, method='sigmoid', cv='prefit')
+                calibrator.fit(X[val_idx], y[val_idx])
+                val_probs = calibrator.predict_proba(X[val_idx])[:, 1]
+                test_probs = calibrator.predict_proba(X_test)[:, 1]
+        
+        oof_preds[val_idx] = np.clip(val_probs, CONFIG.params["EPSILON_PROB_CLIP"], 1-CONFIG.params["EPSILON_PROB_CLIP"])
+        test_preds.append(np.clip(test_probs, CONFIG.params["EPSILON_PROB_CLIP"], 1-CONFIG.params["EPSILON_PROB_CLIP"]))
+        
+        try:
+            fold_auc = roc_auc_score(y[val_idx], val_probs)
+            elapsed = time.time() - start_time
+            print(f"Fold {fold}/{n_splits} | AUC: {fold_auc:.4f} | Time: {elapsed:.1f}s")
+        except Exception as e:
+            print(f"Fold {fold} evaluation failed: {str(e)}")
+    
+    # Ensemble test predictions
+    test_pred_avg = np.mean(test_preds, axis=0)
+    return oof_preds, test_pred_avg, models
+
+def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    """Compute comprehensive evaluation metrics"""
+    metrics = {
+        "auc": roc_auc_score(y_true, y_pred),
+        "brier": brier_score_loss(y_true, y_pred),
+        "ece": 0.0
+    }
+    
+    # Expected Calibration Error (ECE)
+    bins = np.linspace(0, 1, CONFIG.params["N_ECE_BINS"] + 1)
+    for i in range(len(bins) - 1):
+        mask = (y_pred >= bins[i]) & (y_pred < bins[i+1])
+        if np.any(mask):
+            bin_pred = y_pred[mask].mean()
+            bin_true = y_true[mask].mean()
+            metrics["ece"] += abs(bin_pred - bin_true) * mask.mean()
+    
+    return metrics
+
+def extract_feature_importance(models, word_vec, char_vec):
+    """Extract and format feature importance from model ensemble"""
+    if not hasattr(models[0], "coef_"):
+        return {"positive": [], "negative": []}
+    
+    # Average coefficients across folds
+    avg_coef = np.mean([model.coef_[0] for model in models], axis=0)
+    features = np.concatenate([
+        word_vec.get_feature_names_out(),
+        char_vec.get_feature_names_out(),
+        ["feat_length", "feat_punct", "feat_caps_ratio", "feat_word_count"]
+    ])
+    
+    n_top = CONFIG.params["TOP_N_FEATURES_DISPLAY"]
+    top_pos = np.argsort(avg_coef)[-n_top:][::-1]
+    top_neg = np.argsort(avg_coef)[:n_top]
+    
+    return {
+        "positive": [{"name": features[i], "weight": float(avg_coef[i])} for i in top_pos],
+        "negative": [{"name": features[i], "weight": float(avg_coef[i])} for i in top_neg]
+    }
+  def generate_dashboard(metrics, feature_importance, predictions, output_path):
+    """Generate professional HTML dashboard"""
+    predictions_js = json.dumps(predictions).replace("</", "<\\/")
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' cdn.jsdelivr.net;">
+        <title>AI Model Analysis Dashboard</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            :root {{
+                --primary: #4361ee;
+                --secondary: #3f37c9;
+                --success: #4cc9f0;
+                --danger: #f72585;
+                --light: #f8f9fa;
+                --dark: #212529;
+            }}
+            * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }}
+            body {{ background-color: #f5f7fb; color: #333; line-height: 1.6; padding: 20px; }}
+            .container {{ max-width: 1200px; margin: 0 auto; }}
+            header {{ text-align: center; margin-bottom: 30px; padding: 20px 0;
+                     background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white;
+                     border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+            .dashboard-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; margin-bottom: 30px; }}
+            .card {{ background: white; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 25px; transition: transform 0.3s ease; }}
+            .card:hover {{ transform: translateY(-5px); box-shadow: 0 6px 12px rgba(0,0,0,0.1); }}
+            .card h2 {{ color: var(--primary); margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid var(--success); }}
+            .metrics-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }}
+            .metric {{ text-align: center; padding: 15px; background: var(--light); border-radius: 8px; }}
+            .metric-value {{ font-size: 1.8rem; font-weight: bold; color: var(--primary); margin: 10px 0; }}
+            .feature-list {{ list-style-type: none; }}
+            .feature-list li {{ padding: 10px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }}
+            .feature-weight {{ font-weight: bold; }}
+            .positive {{ color: var(--success); }}
+            .negative {{ color: var(--danger); }}
+            .predictions-section {{ margin-top: 30px; }}
+            .controls {{ display: flex; gap: 15px; margin-bottom: 20px; }}
+            .btn {{ background: var(--primary); color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: 600; transition: background 0.3s; flex: 1; }}
+            .btn:hover {{ background: var(--secondary); }}
+            .prediction-table {{ max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; }}
+            table {{ width: 100%; border-collapse: collapse; }}
+            th, td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }}
+            th {{ background-color: var(--light); position: sticky; top: 0; }}
+            tr:hover {{ background-color: rgba(67, 97, 238, 0.05); }}
+            footer {{ text-align: center; margin-top: 40px; padding: 20px; color: #6c757d; font-size: 0.9rem; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>AI Model Analysis Dashboard</h1>
+                <p>Performance Mode: {CONFIG.params["PERFORMANCE_MODE"].replace('_', ' ').title()}</p>
+            </header>
+
+            <div class="dashboard-grid">
+                <div class="card">
+                    <h2>Performance Metrics</h2>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <h3>AUC Score</h3>
+                            <div class="metric-value">{metrics['auc']:.4f}</div>
+                            <p>Area Under ROC Curve</p>
+                        </div>
+                        <div class="metric">
+                            <h3>Brier Score</h3>
+                            <div class="metric-value">{metrics['brier']:.4f}</div>
+                            <p>Probability Calibration</p>
+                        </div>
+                        <div class="metric">
+                            <h3>ECE</h3>
+                            <div class="metric-value">{metrics['ece']:.4f}</div>
+                            <p>Expected Calibration Error</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Top Predictive Features</h2>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <h3 class="positive">Positive Impact</h3>
+                            <ul class="feature-list">
+                                {"".join(f'<li>{feat["name"]} <span class="feature-weight positive">+{feat["weight"]:.3f}</span></li>' for feat in feature_importance["positive"][:7])}
+                            </ul>
+                        </div>
+                        <div>
+                            <h3 class="negative">Negative Impact</h3>
+                            <ul class="feature-list">
+                                {"".join(f'<li>{feat["name"]} <span class="feature-weight negative">{feat["weight"]:.3f}</span></li>' for feat in feature_importance["negative"][:7])}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card predictions-section">
+                <h2>Test Predictions</h2>
+                <div class="controls">
+                    <button class="btn" onclick="downloadCSV()">Download submission.csv</button>
+                    <button class="btn" onclick="downloadJSON()">Download Full Results</button>
+                </div>
+                <div class="prediction-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Row ID</th>
+                                <th>Rule Violation Probability</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {"".join(f'<tr><td>{p["row_id"]}</td><td>{p["rule_violation"]:.6f}</td></tr>' for p in predictions[:15])}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <footer>
+                <p>Generated by AI Model Analysis Pipeline v{CONFIG.params["VERSION"]}</p>
+                <p>{time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+            </footer>
+        </div>
+
+        <script id="predictions-data" type="application/json">
+            {predictions_js}
+        </script>
+
+        <script>
+            function downloadCSV() {{
+                const data = JSON.parse(document.getElementById('predictions-data').textContent);
+                let csv = 'row_id,rule_violation\\n';
+                data.forEach(row => {{ 
+                    csv += `${row.row_id},${row.rule_violation}\\n`;
+                }});
+                const blob = new Blob([csv], {{ type: 'text/csv' }});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; 
+                a.download = 'submission.csv';
+                document.body.appendChild(a); 
+                a.click(); 
+                document.body.removeChild(a);
+            }}
+            
+            function downloadJSON() {{
+                const data = {{
+                    metrics: {json.dumps(metrics)},
+                    featureImportance: {json.dumps(feature_importance)},
+                    predictions: JSON.parse(document.getElementById('predictions-data').textContent)
+                }};
+                const jsonStr = JSON.stringify(data, null, 2);
+                const blob = new Blob([jsonStr], {{ type: 'application/json' }});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; 
+                a.download = 'analysis_results.json';
+                document.body.appendChild(a); 
+                a.click(); 
+                document.body.removeChild(a);
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    with open(output_path, "w") as f:
+        f.write(html_content)
+
+# ------------------ Main Execution ------------------
+def main():
+    print(f"🚀 Starting AI Model Analysis Pipeline v{CONFIG.params['VERSION']}")
+    print(f"⚡ Performance Mode: {CONFIG.params['PERFORMANCE_MODE'].replace('_', ' ').title()}")
+    start_time = time.time()
+    
+    try:
+        # Setup paths and load data
+        train_path, test_path, _, work_dir, is_synthetic = get_data_paths()
+        print(f"📂 Data paths:\n- Train: {train_path}\n- Test: {test_path}")
+        if is_synthetic:
+            print("⚠️ Using synthetic data for demonstration")
+        
+        train_df = pd.read_csv(train_path)
+        test_df = pd.read_csv(test_path)
+        print(f"📊 Data loaded: {len(train_df)} train, {len(test_df)} test samples")
+        
+        # Preprocess data
+        train_df, test_df, train_text, test_text, y, groups = preprocess_dataframes(train_df, test_df)
+        
+        # Feature engineering
+        X, X_test, word_vec, char_vec, _ = extract_features(
+            train_text, test_text, train_df["body"], test_df["body"]
+        )
+        
+        # Cross-validation strategy
+        cv, n_splits, strategy = get_cv_strategy(y, groups)
+        
+        # Model training and prediction
+        train_start = time.time()
+        oof_preds, test_preds, models = train_model(X, y, X_test, groups, cv, n_splits)
+        train_time = time.time() - train_start
+        
+        # Evaluation metrics
+        metrics = calculate_metrics(y, oof_preds)
+        
+        # Feature importance
+        feature_importance = extract_feature_importance(models, word_vec, char_vec)
+        
+        # Format predictions
+        predictions = [
+            {"row_id": int(row_id), "rule_violation": float(prob)}
+            for row_id, prob in zip(test_df["row_id"], test_preds)
+        ]
+        
+        # Save outputs
+        outputs = {
+            "config": CONFIG.to_ts_interface(),
+            "metrics": metrics,
+            "featureImportance": feature_importance,
+            "predictions": predictions
+        }
+        
+        # Save JSON results
+        json_path = work_dir / "analysis_results.json"
+        with open(json_path, "w") as f:
+            json.dump(outputs, f, indent=2)
+        print(f"💾 JSON results saved to {json_path}")
+        
+        # Generate dashboard
+        dashboard_path = work_dir / "dashboard.html"
+        generate_dashboard(metrics, feature_importance, predictions, dashboard_path)
+        print(f"📊 Dashboard saved to {dashboard_path}")
+        
+        # Save submission file
+        submission_path = work_dir / "submission.csv"
+        pd.DataFrame(predictions).to_csv(submission_path, index=False)
+        print(f"📝 Submission file saved to {submission_path}")
+        
+        elapsed = time.time() - start_time
+        print(f"✅ Analysis completed in {elapsed:.2f} seconds!")
+        print(f"  - Training time: {train_time:.2f}s")
+        print(f"  - Final AUC: {metrics['auc']:.4f}")
+        
+    except SingleClassError as e:
+        print(f"❌ Analysis terminated: {str(e)}")
+    except DataValidationError as e:
+        print(f"❌ Data validation error: {str(e)}")
+    except Exception as e:
+        print(f"❌ Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    main()
+
+if __name__ == "__main__":
+    main()
+
