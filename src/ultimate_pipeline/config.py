@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -25,6 +26,9 @@ def _load_dict(path: Path) -> Dict[str, Any]:
             return yaml.safe_load(handle)
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -112,7 +116,6 @@ class AnalysisConfig:
             self.dimensionality_reduction_components = int(self.dimensionality_reduction_components)
         if self.explained_variance is not None:
             self.explained_variance = float(self.explained_variance)
-        self._apply_performance_mode()
 
     @classmethod
     def from_file(cls, path: Path | str) -> "AnalysisConfig":
@@ -200,7 +203,13 @@ class AnalysisConfig:
             self.n_splits_max = 3
             self.batch_size = 5_000
             self.use_sgd = True
+        elif mode in {"balanced", "default", None}:
+            self.use_sgd = self.large_data_threshold > 5_000
         else:
+            LOGGER.warning(
+                "Unknown performance mode '%s'; applying balanced defaults.",
+                mode,
+            )
             self.use_sgd = self.large_data_threshold > 5_000
 
         if isinstance(self.cache_dir, str):

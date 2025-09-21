@@ -18,11 +18,15 @@ class Calibrator:
     def needs_calibration(self) -> bool:
         return self.method not in {"none", "off", None}
 
-    def calibrate(self, model, X_val, y_val):
+    def calibrate(self, model, X_val=None, y_val=None):
         method = (self.method or "none").lower()
         if method == "isotonic":
+            if X_val is None or y_val is None:
+                raise ValueError("Isotonic calibration requires validation features and labels.")
             return _IsotonicCalibrator(self.clip).fit(model, X_val, y_val)
         if method in {"sigmoid", "platt"}:
+            if X_val is None or y_val is None:
+                raise ValueError("Sigmoid calibration requires validation features and labels.")
             return _SigmoidCalibrator(self.clip).fit(model, X_val, y_val)
         return _IdentityCalibrator(self.clip).fit(model)
 
