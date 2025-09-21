@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
+import pandas as pd
 
 from .metrics import MetricResult
 
@@ -72,7 +73,5 @@ def save_dashboard(path: Path, metrics: List[MetricResult]) -> None:
 
 
 def save_submission(path: Path, row_ids: np.ndarray, predictions: np.ndarray) -> None:
-    import pandas as pd
-
     df = pd.DataFrame({"row_id": row_ids, "rule_violation": predictions})
     df.to_csv(path, index=False)

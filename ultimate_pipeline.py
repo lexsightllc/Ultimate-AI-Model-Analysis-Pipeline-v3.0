@@ -2,11 +2,6 @@
 """Compat shim to launch the Ultimate AI Model Analysis pipeline package."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
-
 from ultimate_pipeline.cli import main
 
 

@@ -1,12 +1,17 @@
 """Dimensionality reduction strategies."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
 from scipy import sparse
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.decomposition import TruncatedSVD
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -25,27 +30,48 @@ class DimensionalityReducer(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         if not sparse.issparse(X):
             raise ValueError("DimensionalityReducer expects a sparse input matrix.")
-        n_components = self.n_components
-        if self.explained_variance is not None:
-            max_dim = min(X.shape) - 1
-            n_components = min(max_dim, n_components or max_dim)
-        self._svd = TruncatedSVD(
-            n_components=n_components,
-            random_state=self.random_state,
-        )
-        self._svd.fit(X)
-        if self.explained_variance is not None:
-            cumulative = self._svd.explained_variance_ratio_.sum()
-            if cumulative < self.explained_variance:
-                # Increase components if variance target not met
-                additional = int(self.explained_variance / max(cumulative, 1e-6) * self._svd.n_components)
-                additional = min(additional, X.shape[1] - 1)
-                if additional > self._svd.n_components:
-                    self._svd = TruncatedSVD(
-                        n_components=additional,
-                        random_state=self.random_state,
-                    )
-                    self._svd.fit(X)
+        max_dim = min(X.shape) - 1
+        if max_dim <= 0:
+            raise ValueError("DimensionalityReducer requires at least two features for SVD.")
+
+        requested = self.n_components or max_dim
+        requested = min(requested, max_dim)
+
+        if self.explained_variance is None:
+            self._svd = TruncatedSVD(n_components=requested, random_state=self.random_state)
+            self._svd.fit(X)
+            return self
+
+        probe_components = min(max_dim, max(requested, min(256, max_dim)))
+        probe_svd = TruncatedSVD(n_components=probe_components, random_state=self.random_state)
+        probe_svd.fit(X)
+
+        cumulative = np.cumsum(probe_svd.explained_variance_ratio_)
+        target_idx = int(np.searchsorted(cumulative, self.explained_variance, side="left"))
+
+        if target_idx >= len(cumulative):
+            LOGGER.warning(
+                "Unable to reach explained variance %.3f with %s components; using %s components.",
+                self.explained_variance,
+                probe_components,
+                probe_components,
+            )
+            target_components = probe_components
+        else:
+            target_components = max(requested, target_idx + 1)
+            target_components = min(target_components, max_dim)
+
+        if target_components <= probe_components:
+            if target_components < probe_components:
+                probe_svd.components_ = probe_svd.components_[:target_components]
+                probe_svd.explained_variance_ = probe_svd.explained_variance_[:target_components]
+                probe_svd.explained_variance_ratio_ = probe_svd.explained_variance_ratio_[:target_components]
+                probe_svd.singular_values_ = probe_svd.singular_values_[:target_components]
+                probe_svd.n_components = target_components
+            self._svd = probe_svd
+        else:
+            self._svd = TruncatedSVD(n_components=target_components, random_state=self.random_state)
+            self._svd.fit(X)
         return self
 
     def transform(self, X):
