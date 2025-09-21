@@ -33,8 +33,8 @@ class PipelineResult:
 
 class AnalysisPipeline:
     def __init__(self, config: Optional[AnalysisConfig] = None) -> None:
-        self.config = config or load_default_config()
-        self.config._apply_performance_mode()
+        base_config = config or load_default_config()
+        self.config = base_config._apply_performance_mode()
         self.artifacts = prepare_run_directory(self.config.cache_dir)
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
         LOGGER.info("Initialized pipeline with mode=%s", self.config.performance_mode)

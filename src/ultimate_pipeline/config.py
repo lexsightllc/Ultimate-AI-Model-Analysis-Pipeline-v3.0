@@ -170,50 +170,53 @@ class AnalysisConfig:
             "cache_enabled": self.cache_enabled,
         }
 
-    def _apply_performance_mode(self) -> None:
+    def _apply_performance_mode(self) -> "AnalysisConfig":
+        """Return a new configuration with performance mode tweaks applied."""
+
+        data = {**self.as_dict()}
+        # ``as_dict`` returns the current parameters, but we need fresh copies of
+        # mutable values before adjusting them based on the selected mode.
+        data["tfidf_word_params"] = dict(self.tfidf_word_params)
+        data["tfidf_char_params"] = dict(self.tfidf_char_params)
+
         mode = self.performance_mode
         if mode == "best_accuracy":
-            self.max_tfidf_features = 300_000
-            self.tfidf_word_params = {
-                **self.tfidf_word_params,
+            data["max_tfidf_features"] = 300_000
+            data["tfidf_word_params"].update({
                 "ngram_range": (1, 3),
                 "min_df": 2,
-            }
-            self.tfidf_char_params = {
-                **self.tfidf_char_params,
+            })
+            data["tfidf_char_params"].update({
                 "ngram_range": (2, 6),
                 "min_df": 2,
-            }
-            self.calibration_method = "sigmoid"
-            self.early_stopping = False
-            self.use_sgd = False
+            })
+            data["calibration_method"] = "sigmoid"
+            data["early_stopping"] = False
+            data["use_sgd"] = False
         elif mode == "max_speed":
-            self.max_tfidf_features = 50_000
-            self.tfidf_word_params = {
-                **self.tfidf_word_params,
+            data["max_tfidf_features"] = 50_000
+            data["tfidf_word_params"].update({
                 "ngram_range": (1, 1),
                 "min_df": 5,
-            }
-            self.tfidf_char_params = {
-                **self.tfidf_char_params,
+            })
+            data["tfidf_char_params"].update({
                 "ngram_range": (3, 4),
                 "min_df": 5,
-            }
-            self.calibration_enabled = False
-            self.n_splits_max = 3
-            self.batch_size = 5_000
-            self.use_sgd = True
+            })
+            data["calibration_enabled"] = False
+            data["n_splits_max"] = 3
+            data["batch_size"] = 5_000
+            data["use_sgd"] = True
         elif mode in {"balanced", "default", None}:
-            self.use_sgd = self.large_data_threshold > 5_000
+            data["use_sgd"] = data["large_data_threshold"] > 5_000
         else:
             LOGGER.warning(
                 "Unknown performance mode '%s'; applying balanced defaults.",
                 mode,
             )
-            self.use_sgd = self.large_data_threshold > 5_000
+            data["use_sgd"] = data["large_data_threshold"] > 5_000
 
-        if isinstance(self.cache_dir, str):
-            self.cache_dir = Path(self.cache_dir)
+        return AnalysisConfig.from_dict(data)
 
 
 def load_default_config(overrides: Optional[Dict[str, Any]] = None) -> AnalysisConfig:
