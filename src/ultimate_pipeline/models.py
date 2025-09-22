@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.svm import LinearSVC
 
@@ -46,11 +45,10 @@ class ModelFactory:
                 random_state=self.seed,
             )
         if target == "linearsvc":
-            base = LinearSVC(
+            return LinearSVC(
                 C=1.0,
                 max_iter=self.max_iter,
                 dual=False,
                 random_state=self.seed,
             )
-            return CalibratedClassifierCV(base, method="sigmoid", cv=5)
         raise ValueError(f"Unknown model '{name}'.")
