@@ -16,7 +16,7 @@ from .config import AnalysisConfig
 class DatasetBundle:
     train: pd.DataFrame
     test: pd.DataFrame
-    sample_submission: pd.DataFrame
+    sample_submission: Optional[pd.DataFrame]
     work_dir: Path
     is_synthetic: bool
 
@@ -45,7 +45,9 @@ def locate_data_files() -> Tuple[Optional[Path], Optional[Path], Optional[Path],
     return train_path, test_path, sample_path, work_dir
 
 
-def generate_synthetic_data(config: AnalysisConfig, work_dir: Path, n_train: int = 5_000, n_test: int = 1_000) -> DatasetBundle:
+def generate_synthetic_data(
+    config: AnalysisConfig, work_dir: Path, n_train: int = 5_000, n_test: int = 1_000
+) -> DatasetBundle:
     rng = np.random.default_rng(config.seed)
     rules = [f"Rule_{i+1}" for i in range(10)]
     subs = [f"Subreddit_{chr(65 + i)}" for i in range(8)]
@@ -100,7 +102,13 @@ def generate_synthetic_data(config: AnalysisConfig, work_dir: Path, n_train: int
     test.to_csv(test_path, index=False)
     sample.to_csv(sample_path, index=False)
 
-    return DatasetBundle(train=train, test=test, sample_submission=sample, work_dir=work_dir, is_synthetic=True)
+    return DatasetBundle(
+        train=train,
+        test=test,
+        sample_submission=sample,
+        work_dir=work_dir,
+        is_synthetic=True,
+    )
 
 
 def load_datasets(config: AnalysisConfig) -> DatasetBundle:
@@ -112,4 +120,31 @@ def load_datasets(config: AnalysisConfig) -> DatasetBundle:
     test = pd.read_csv(test_path)
     sample = pd.read_csv(sample_path)
 
-    return DatasetBundle(train=train, test=test, sample_submission=sample, work_dir=work_dir, is_synthetic=False)
+    return DatasetBundle(
+        train=train,
+        test=test,
+        sample_submission=sample,
+        work_dir=work_dir,
+        is_synthetic=False,
+    )
+
+
+def load_custom_datasets(
+    config: AnalysisConfig,
+    train_path: Path | str,
+    test_path: Optional[Path | str] = None,
+    sample_path: Optional[Path | str] = None,
+) -> DatasetBundle:
+    """Load datasets from explicitly provided paths."""
+
+    train = pd.read_csv(train_path)
+    test = pd.read_csv(test_path) if test_path is not None else pd.DataFrame()
+    sample = pd.read_csv(sample_path) if sample_path is not None else None
+    work_dir = Path(config.cache_dir)
+    return DatasetBundle(
+        train=train,
+        test=test,
+        sample_submission=sample,
+        work_dir=work_dir,
+        is_synthetic=False,
+    )
