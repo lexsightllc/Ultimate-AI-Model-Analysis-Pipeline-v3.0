@@ -38,22 +38,55 @@ class FeatureAssembler:
     cache_dir: Optional[Path] = None
 
     def __post_init__(self) -> None:
+        self.word_vectorizer: Optional[VectorizerBase]
+        self.char_vectorizer: Optional[VectorizerBase]
+
+        mode = (self.config.vectorizer_mode or "word_char").lower()
+
         word_params = {**self.config.tfidf_word_params, "dtype": np.float32}
         if "ngram_range" in word_params:
             word_params["ngram_range"] = tuple(word_params["ngram_range"])
+
         char_params = {**self.config.tfidf_char_params, "dtype": np.float32}
         if "ngram_range" in char_params:
             char_params["ngram_range"] = tuple(char_params["ngram_range"])
-        self.word_vectorizer = make_vectorizer(
-            self.config.vectorizer,
-            word_params,
-            self.config.max_tfidf_features,
-        )
-        self.char_vectorizer = make_vectorizer(
-            self.config.vectorizer,
-            char_params,
-            self.config.max_tfidf_features,
-        )
+
+        include_word = mode in {"word_char", "tfidf_word_char_union", "word_only"}
+        include_char = mode in {
+            "word_char",
+            "tfidf_char",
+            "tfidf_char_wb",
+            "tfidf_word_char_union",
+            "char_only",
+        }
+
+        if include_char:
+            if mode in {"tfidf_char_wb", "tfidf_word_char_union"}:
+                char_params["analyzer"] = "char_wb"
+                ngram_range = char_params.get("ngram_range")
+                if ngram_range:
+                    char_params["ngram_range"] = (ngram_range[0], max(ngram_range[1], 6))
+                else:
+                    char_params["ngram_range"] = (3, 6)
+            elif mode == "tfidf_char":
+                char_params["analyzer"] = "char"
+
+            self.char_vectorizer = make_vectorizer(
+                self.config.vectorizer,
+                char_params,
+                self.config.max_tfidf_features,
+            )
+        else:
+            self.char_vectorizer = None
+
+        if include_word:
+            self.word_vectorizer = make_vectorizer(
+                self.config.vectorizer,
+                word_params,
+                self.config.max_tfidf_features,
+            )
+        else:
+            self.word_vectorizer = None
         self.meta_featurizer = MetaFeaturizer()
         self.reducer: Optional[DimensionalityReducer] = None
         if self.config.dimensionality_reduction:
@@ -74,10 +107,16 @@ class FeatureAssembler:
         start = time.time()
         train_text = self.text_preprocessor.fit_transform(train_frame)
         train_body = train_frame[self.config.text_columns[0]].fillna("")
-        word = self._cache(_fit_transform_vectorizer, self.word_vectorizer, train_text)
-        char = self._cache(_fit_transform_vectorizer, self.char_vectorizer, train_text)
+        matrices = []
+        if self.word_vectorizer is not None:
+            word = self._cache(_fit_transform_vectorizer, self.word_vectorizer, train_text)
+            matrices.append(_to_dense_if_needed(word))
+        if self.char_vectorizer is not None:
+            char = self._cache(_fit_transform_vectorizer, self.char_vectorizer, train_text)
+            matrices.append(_to_dense_if_needed(char))
         meta = self.meta_featurizer.fit(train_body).transform(train_body)
-        features = sparse.hstack([_to_dense_if_needed(word), _to_dense_if_needed(char), meta], format="csr")
+        matrices.append(meta)
+        features = sparse.hstack(matrices, format="csr")
         if self.reducer is not None:
             features = self.reducer.fit_transform(features)
         elapsed = time.time() - start
@@ -87,10 +126,16 @@ class FeatureAssembler:
     def transform(self, frame) -> sparse.csr_matrix:
         text = self.text_preprocessor.transform(frame)
         body = frame[self.config.text_columns[0]].fillna("")
-        word = self._cache(_transform_vectorizer, self.word_vectorizer, text)
-        char = self._cache(_transform_vectorizer, self.char_vectorizer, text)
+        matrices = []
+        if self.word_vectorizer is not None:
+            word = self._cache(_transform_vectorizer, self.word_vectorizer, text)
+            matrices.append(_to_dense_if_needed(word))
+        if self.char_vectorizer is not None:
+            char = self._cache(_transform_vectorizer, self.char_vectorizer, text)
+            matrices.append(_to_dense_if_needed(char))
         meta = self.meta_featurizer.transform(body)
-        features = sparse.hstack([_to_dense_if_needed(word), _to_dense_if_needed(char), meta], format="csr")
+        matrices.append(meta)
+        features = sparse.hstack(matrices, format="csr")
         if self.reducer is not None:
             features = self.reducer.transform(features)
         return features

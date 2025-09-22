@@ -53,7 +53,19 @@ def build_overrides(args: argparse.Namespace) -> Dict[str, Any]:
     if args.normalizer:
         overrides["normalizer"] = args.normalizer
     if args.vectorizer:
-        overrides["vectorizer"] = args.vectorizer
+        normalized_vectorizer = args.vectorizer.lower()
+        char_modes = {
+            "tfidf_char": "tfidf_char",
+            "tfidf_char_wb": "tfidf_char_wb",
+            "tfidf_word_char_union": "tfidf_word_char_union",
+        }
+        if normalized_vectorizer in {"tfidf", "hashing", "hashing_tfidf", "cuml"}:
+            overrides["vectorizer"] = normalized_vectorizer
+        elif normalized_vectorizer in char_modes:
+            overrides["vectorizer"] = "tfidf"
+            overrides["vectorizer_mode"] = char_modes[normalized_vectorizer]
+        else:
+            overrides["vectorizer"] = args.vectorizer
     if args.n_splits:
         overrides["n_splits_max"] = args.n_splits
     if args.max_features:

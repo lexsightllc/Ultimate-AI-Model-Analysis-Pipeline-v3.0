@@ -52,6 +52,7 @@ tol: 0.0001
 use_sgd: false
 normalizer: regex
 vectorizer: tfidf
+vectorizer_mode: word_char
 dimensionality_reduction: null
 dimensionality_reduction_components: null
 explained_variance: null

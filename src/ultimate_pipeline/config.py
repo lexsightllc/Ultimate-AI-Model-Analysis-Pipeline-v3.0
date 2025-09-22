@@ -99,6 +99,7 @@ class AnalysisConfig:
     use_sgd: bool = False
     normalizer: str = "regex"
     vectorizer: str = "tfidf"
+    vectorizer_mode: str = "word_char"
     dimensionality_reduction: Optional[str] = None
     dimensionality_reduction_components: Optional[int] = None
     explained_variance: Optional[float] = None
@@ -124,6 +125,20 @@ class AnalysisConfig:
             self.dimensionality_reduction_components = int(self.dimensionality_reduction_components)
         if self.explained_variance is not None:
             self.explained_variance = float(self.explained_variance)
+        self.vectorizer_mode = (self.vectorizer_mode or "word_char").lower()
+        valid_modes = {
+            "word_char",
+            "tfidf_char",
+            "tfidf_char_wb",
+            "tfidf_word_char_union",
+            "char_only",
+            "word_only",
+        }
+        if self.vectorizer_mode not in valid_modes:
+            raise ValueError(
+                "vectorizer_mode must be one of "
+                "{'word_char','tfidf_char','tfidf_char_wb','tfidf_word_char_union','char_only','word_only'}"
+            )
 
     @classmethod
     def from_file(cls, path: Path | str) -> "AnalysisConfig":
@@ -174,6 +189,7 @@ class AnalysisConfig:
             "use_sgd": self.use_sgd,
             "normalizer": self.normalizer,
             "vectorizer": self.vectorizer,
+            "vectorizer_mode": self.vectorizer_mode,
             "dimensionality_reduction": self.dimensionality_reduction,
             "dimensionality_reduction_components": self.dimensionality_reduction_components,
             "explained_variance": self.explained_variance,

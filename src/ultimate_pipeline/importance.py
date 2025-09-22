@@ -19,7 +19,12 @@ class FeatureImportanceResult:
     negative: List[Dict[str, float]]
 
 
-def compute_linear_importance(models, word_vectorizer: VectorizerBase, char_vectorizer: VectorizerBase, top_n: int = 15) -> FeatureImportanceResult:
+def compute_linear_importance(
+    models,
+    word_vectorizer: Optional[VectorizerBase],
+    char_vectorizer: Optional[VectorizerBase],
+    top_n: int = 15,
+) -> FeatureImportanceResult:
     coefs: List[np.ndarray] = []
     for model in models or []:
         coef = _extract_coef(model)
@@ -33,8 +38,10 @@ def compute_linear_importance(models, word_vectorizer: VectorizerBase, char_vect
 
     avg_coef = np.mean(coefs, axis=0)
     features: List[str] = []
-    features.extend(_get_feature_names(word_vectorizer, "word"))
-    features.extend(_get_feature_names(char_vectorizer, "character"))
+    if word_vectorizer is not None:
+        features.extend(_get_feature_names(word_vectorizer, "word"))
+    if char_vectorizer is not None:
+        features.extend(_get_feature_names(char_vectorizer, "character"))
     features.extend(["feat_length", "feat_punct", "feat_caps_ratio", "feat_word_count"])
     top_positive_idx = np.argsort(avg_coef)[-top_n:][::-1]
     top_negative_idx = np.argsort(avg_coef)[:top_n]
