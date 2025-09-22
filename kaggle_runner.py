@@ -8,13 +8,43 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-# ``__file__`` is not defined when the module is executed via certain
-# interactive shells (e.g. Kaggle notebooks).  Fall back to the current
-# working directory so the runner still locates the repository.
-try:
-    PROJECT_ROOT = Path(__file__).resolve().parent
-except NameError:  # pragma: no cover - defensive for notebook execution
-    PROJECT_ROOT = Path.cwd()
+KAGGLE_WORKING = Path("/kaggle/working")
+DEFAULT_CODE_DATASET = Path("/kaggle/input/ultimate-ai-model-analysis-pipeline-v3-0")
+DEFAULT_COMP_DATASET = Path("/kaggle/input/jigsaw-agile-community-rules")
+
+
+def _discover_project_root() -> Path:
+    """Best-effort detection of the repository root in Kaggle environments."""
+
+    candidates = []
+    try:  # ``__file__`` is undefined in Kaggle notebooks
+        candidates.append(Path(__file__).resolve().parent)
+    except NameError:  # pragma: no cover - defensive for notebook execution
+        pass
+
+    candidates.extend(
+        [
+            Path.cwd(),
+            DEFAULT_CODE_DATASET,
+            DEFAULT_CODE_DATASET / "Ultimate-AI-Model-Analysis-Pipeline-v3.0",
+        ]
+    )
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+
+        src_dir = candidate / "src"
+        if src_dir.exists() and (src_dir / "ultimate_pipeline").exists():
+            return candidate
+
+        if (candidate / "pyproject.toml").exists():
+            return candidate
+
+    return Path.cwd()
+
+
+PROJECT_ROOT = _discover_project_root()
 SRC_ROOT = PROJECT_ROOT / "src"
 if SRC_ROOT.exists():
     sys.path.insert(0, str(SRC_ROOT))
@@ -22,10 +52,6 @@ if SRC_ROOT.exists():
 from ultimate_pipeline.config import AnalysisConfig, load_default_config
 from ultimate_pipeline.pipeline import AnalysisPipeline
 from ultimate_pipeline.data import DatasetBundle, load_custom_datasets
-
-KAGGLE_WORKING = Path("/kaggle/working")
-DEFAULT_CODE_DATASET = Path("/kaggle/input/ultimate-ai-model-analysis-pipeline-v3-0")
-DEFAULT_COMP_DATASET = Path("/kaggle/input/jigsaw-agile-community-rules")
 
 
 def _default_output_dir() -> Path:
