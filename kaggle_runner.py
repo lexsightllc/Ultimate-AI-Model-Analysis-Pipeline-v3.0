@@ -8,7 +8,14 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+# __file__ may be missing when the module is executed in certain Kaggle
+# notebook contexts. Fall back to the current working directory which, on
+# Kaggle, is the project root where this script lives. We also guard against
+# symlinked paths by resolving the fallback path when possible.
+try:
+    PROJECT_ROOT = Path(__file__).resolve().parent
+except NameError:  # pragma: no cover - environment dependent
+    PROJECT_ROOT = Path.cwd().resolve()
 SRC_ROOT = PROJECT_ROOT / "src"
 if SRC_ROOT.exists():
     sys.path.insert(0, str(SRC_ROOT))
