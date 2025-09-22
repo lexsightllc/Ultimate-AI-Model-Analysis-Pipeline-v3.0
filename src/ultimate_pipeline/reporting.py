@@ -72,6 +72,13 @@ def save_dashboard(path: Path, metrics: List[MetricResult]) -> None:
     path.write_text(html, encoding="utf-8")
 
 
-def save_submission(path: Path, row_ids: np.ndarray, predictions: np.ndarray) -> None:
-    df = pd.DataFrame({"row_id": row_ids, "rule_violation": predictions})
+def save_submission(
+    path: Path,
+    row_ids: np.ndarray,
+    predictions: np.ndarray,
+    *,
+    id_column: str = "row_id",
+    label_column: str = "rule_violation",
+) -> None:
+    df = pd.DataFrame({id_column: row_ids, label_column: predictions})
     df.to_csv(path, index=False)

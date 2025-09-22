@@ -24,6 +24,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--explained-variance", type=float, help="Target explained variance for SVD")
     parser.add_argument("--n-jobs", type=int, help="Parallel jobs for estimators")
     parser.add_argument("--output-config", type=str, help="Path to dump the resolved configuration", default=None)
+    parser.add_argument("--text-cols", nargs="+", help="Text columns to use for modelling")
+    parser.add_argument("--label-col", type=str, help="Target label column name")
+    parser.add_argument("--id-col", type=str, help="Identifier column for submissions")
+    parser.add_argument("--train-csv", type=str, help="Explicit path to train.csv")
+    parser.add_argument("--test-csv", type=str, help="Explicit path to test.csv")
+    parser.add_argument(
+        "--sample-submission-csv",
+        type=str,
+        help="Optional path to sample_submission.csv for schema reference",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        help="Directory where run artefacts should be stored",
+        default=None,
+    )
     return parser.parse_args()
 
 
@@ -50,6 +66,15 @@ def build_overrides(args: argparse.Namespace) -> Dict[str, Any]:
         overrides["explained_variance"] = args.explained_variance
     if args.n_jobs is not None:
         overrides["n_jobs"] = args.n_jobs
+    if args.text_cols:
+        overrides["text_columns"] = tuple(args.text_cols)
+        overrides["text_prefixes"] = {col: f"{col}:" for col in args.text_cols}
+    if args.label_col:
+        overrides["label_column"] = args.label_col
+    if args.id_col:
+        overrides["id_column"] = args.id_col
+    if args.output_dir:
+        overrides["cache_dir"] = args.output_dir
     return overrides
 
 
@@ -63,7 +88,21 @@ def main() -> None:
     else:
         config = load_default_config(overrides)
     pipeline = AnalysisPipeline(config)
-    result = pipeline.run()
+
+    bundle = None
+    if args.train_csv or args.test_csv or args.sample_submission_csv:
+        from .data import load_custom_datasets
+
+        if not args.train_csv:
+            raise ValueError("--train-csv must be provided when using explicit dataset paths")
+        bundle = load_custom_datasets(
+            config,
+            train_path=args.train_csv,
+            test_path=args.test_csv,
+            sample_path=args.sample_submission_csv,
+        )
+
+    result = pipeline.run(bundle)
     if args.output_config:
         Path(args.output_config).write_text(json.dumps(config.as_dict(), indent=2), encoding="utf-8")
     print("Final AUC:", result.metrics[-1].auc if result.metrics else "N/A")

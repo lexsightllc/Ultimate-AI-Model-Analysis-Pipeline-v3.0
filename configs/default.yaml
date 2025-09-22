@@ -25,6 +25,9 @@ text_prefixes:
   positive_example_2: "positive2:"
   negative_example_1: "negative1:"
   negative_example_2: "negative2:"
+label_column: rule_violation
+id_column: row_id
+group_column: rule
 tfidf_word_params:
   strip_accents: unicode
   lowercase: true

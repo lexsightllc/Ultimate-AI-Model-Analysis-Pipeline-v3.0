@@ -66,6 +66,9 @@ class AnalysisConfig:
             "body": "comment:",
         }
     )
+    label_column: str = "rule_violation"
+    id_column: str = "row_id"
+    group_column: str | None = "rule"
     tfidf_word_params: Dict[str, Any] = field(
         default_factory=lambda: {
             "strip_accents": "unicode",
@@ -105,11 +108,16 @@ class AnalysisConfig:
     def __post_init__(self) -> None:
         self.text_columns = tuple(self.text_columns)
         self.text_prefixes = dict(self.text_prefixes)
+        # Ensure every declared text column has a prefix to avoid KeyError later on.
+        for column in self.text_columns:
+            self.text_prefixes.setdefault(column, f"{column}:")
         self.tfidf_word_params = dict(self.tfidf_word_params)
         self.tfidf_char_params = dict(self.tfidf_char_params)
         self.epsilon_prob_clip = float(self.epsilon_prob_clip)
         if isinstance(self.cache_dir, str):
             self.cache_dir = Path(self.cache_dir)
+        if self.group_column is not None and not isinstance(self.group_column, str):
+            raise TypeError("group_column must be a string or None")
         if isinstance(self.dimensionality_reduction, str) and self.dimensionality_reduction.lower() == "none":
             self.dimensionality_reduction = None
         if self.dimensionality_reduction_components is not None:
@@ -152,6 +160,9 @@ class AnalysisConfig:
             "top_n_features_display": self.top_n_features_display,
             "text_columns": self.text_columns,
             "text_prefixes": self.text_prefixes,
+            "label_column": self.label_column,
+            "id_column": self.id_column,
+            "group_column": self.group_column,
             "tfidf_word_params": self.tfidf_word_params,
             "tfidf_char_params": self.tfidf_char_params,
             "large_data_threshold": self.large_data_threshold,
@@ -217,7 +228,14 @@ class AnalysisConfig:
 
 def load_default_config(overrides: Optional[Dict[str, Any]] = None) -> AnalysisConfig:
     if DEFAULT_CONFIG_PATH.exists():
-        base = AnalysisConfig.from_file(DEFAULT_CONFIG_PATH)
+        try:
+            base = AnalysisConfig.from_file(DEFAULT_CONFIG_PATH)
+        except RuntimeError as exc:
+            LOGGER.warning(
+                "Falling back to in-memory defaults because the config file could not be loaded: %s",
+                exc,
+            )
+            base = AnalysisConfig()
     else:
         base = AnalysisConfig()
     return base.with_overrides(overrides)

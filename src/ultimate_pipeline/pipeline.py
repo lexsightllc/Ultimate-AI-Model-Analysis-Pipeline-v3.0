@@ -16,7 +16,12 @@ from .features import FeatureAssembler
 from .importance import FeatureImportanceResult, compute_linear_importance
 from .metrics import MetricResult, compute_metrics
 from .models import ModelFactory
-from .reporting import prepare_run_directory, save_dashboard, save_json, save_submission
+from .reporting import (
+    prepare_run_directory,
+    save_dashboard,
+    save_json,
+    save_submission,
+)
 from .text import build_preprocessor
 
 LOGGER = logging.getLogger("ultimate_pipeline")
@@ -54,7 +59,7 @@ class AnalysisPipeline:
         self.cv_factory = CrossValidatorFactory(self.config.n_splits_max, self.config.seed)
 
     def _validate_inputs(self, bundle: DatasetBundle) -> DatasetBundle:
-        required = set(self.config.text_columns) | {"rule_violation"}
+        required = set(self.config.text_columns) | {self.config.label_column}
         missing = [col for col in required if col not in bundle.train.columns]
         if missing:
             raise ValueError(f"Training data missing columns: {missing}")
@@ -63,6 +68,8 @@ class AnalysisPipeline:
         for column in self.config.text_columns:
             if column not in test_df.columns:
                 test_df[column] = ""
+        if self.config.id_column and self.config.id_column not in test_df.columns:
+            test_df[self.config.id_column] = np.arange(len(test_df))
         for frame in [train_df, test_df]:
             for column in self.config.text_columns:
                 frame[column] = frame[column].fillna("").astype(str)
@@ -87,8 +94,14 @@ class AnalysisPipeline:
         start = time.time()
         bundle = bundle or load_datasets(self.config)
         bundle = self._validate_inputs(bundle)
-        groups = bundle.train.get("rule", "").astype(str).values
-        y = bundle.train["rule_violation"].astype(int).values
+        groups = None
+        if self.config.group_column and self.config.group_column in bundle.train.columns:
+            groups = bundle.train[self.config.group_column].astype(str).values
+        if self.config.label_column not in bundle.train.columns:
+            raise ValueError(
+                f"Label column '{self.config.label_column}' not found in training data."
+            )
+        y = bundle.train[self.config.label_column].astype(int).values
         LOGGER.info("Data loaded: %d train, %d test samples", len(bundle.train), len(bundle.test))
 
         X_train = self.features.fit_transform(bundle.train)
@@ -129,11 +142,19 @@ class AnalysisPipeline:
         duration = time.time() - start
         LOGGER.info("Analysis completed in %.2fs", duration)
 
-        row_ids = bundle.test.get("row_id", np.arange(len(bundle.test)))
+        row_ids = bundle.test.get(
+            self.config.id_column, np.arange(len(bundle.test))
+        )
         submission_path = self.artifacts.run_dir / "submission.csv"
         dashboard_path = self.artifacts.reports_dir / "dashboard.html"
         summary_path = self.artifacts.reports_dir / "analysis_results.json"
-        save_submission(submission_path, row_ids, test_prediction)
+        save_submission(
+            submission_path,
+            row_ids,
+            test_prediction,
+            id_column=self.config.id_column,
+            label_column=self.config.label_column,
+        )
         save_dashboard(dashboard_path, metrics)
         summary = {
             "version": self.config.version,
