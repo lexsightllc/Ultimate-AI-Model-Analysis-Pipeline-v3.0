@@ -173,11 +173,7 @@ class AnalysisConfig:
     def _apply_performance_mode(self) -> "AnalysisConfig":
         """Return a new configuration with performance mode tweaks applied."""
 
-        data = {**self.as_dict()}
-        # ``as_dict`` returns the current parameters, but we need fresh copies of
-        # mutable values before adjusting them based on the selected mode.
-        data["tfidf_word_params"] = dict(self.tfidf_word_params)
-        data["tfidf_char_params"] = dict(self.tfidf_char_params)
+        data = self.as_dict()
 
         mode = self.performance_mode
         if mode == "best_accuracy":

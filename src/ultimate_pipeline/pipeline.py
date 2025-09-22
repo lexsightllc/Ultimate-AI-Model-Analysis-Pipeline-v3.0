@@ -53,17 +53,27 @@ class AnalysisPipeline:
         self.calibrator = Calibrator(self.config.calibration_method, self.config.epsilon_prob_clip)
         self.cv_factory = CrossValidatorFactory(self.config.n_splits_max, self.config.seed)
 
-    def _validate_inputs(self, bundle: DatasetBundle) -> None:
+    def _validate_inputs(self, bundle: DatasetBundle) -> DatasetBundle:
         required = set(self.config.text_columns) | {"rule_violation"}
         missing = [col for col in required if col not in bundle.train.columns]
         if missing:
             raise ValueError(f"Training data missing columns: {missing}")
+        train_df = bundle.train.copy()
+        test_df = bundle.test.copy()
         for column in self.config.text_columns:
-            if column not in bundle.test.columns:
-                bundle.test[column] = ""
-        for frame in [bundle.train, bundle.test]:
+            if column not in test_df.columns:
+                test_df[column] = ""
+        for frame in [train_df, test_df]:
             for column in self.config.text_columns:
                 frame[column] = frame[column].fillna("").astype(str)
+
+        return DatasetBundle(
+            train=train_df,
+            test=test_df,
+            sample_submission=bundle.sample_submission,
+            work_dir=bundle.work_dir,
+            is_synthetic=bundle.is_synthetic,
+        )
 
     def _determine_cv(self, y: np.ndarray, groups: Optional[np.ndarray]):
         n_splits = min(self.config.n_splits_max, max(2, int(np.bincount(y).min())))
@@ -76,7 +86,7 @@ class AnalysisPipeline:
     def run(self, bundle: Optional[DatasetBundle] = None) -> PipelineResult:
         start = time.time()
         bundle = bundle or load_datasets(self.config)
-        self._validate_inputs(bundle)
+        bundle = self._validate_inputs(bundle)
         groups = bundle.train.get("rule", "").astype(str).values
         y = bundle.train["rule_violation"].astype(int).values
         LOGGER.info("Data loaded: %d train, %d test samples", len(bundle.train), len(bundle.test))
