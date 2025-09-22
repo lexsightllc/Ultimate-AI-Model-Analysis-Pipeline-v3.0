@@ -82,3 +82,22 @@ def save_submission(
 ) -> None:
     df = pd.DataFrame({id_column: row_ids, label_column: predictions})
     df.to_csv(path, index=False)
+
+
+def save_oof_predictions(
+    path: Path,
+    row_ids: np.ndarray,
+    y_true: np.ndarray,
+    predictions: np.ndarray,
+    *,
+    id_column: str = "row_id",
+    label_column: str = "rule_violation",
+) -> None:
+    df = pd.DataFrame(
+        {
+            id_column: row_ids,
+            label_column: y_true,
+            "prediction": predictions,
+        }
+    )
+    df.to_csv(path, index=False)

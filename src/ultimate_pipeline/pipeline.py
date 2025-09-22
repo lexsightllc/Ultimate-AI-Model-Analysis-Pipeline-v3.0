@@ -20,6 +20,7 @@ from .reporting import (
     prepare_run_directory,
     save_dashboard,
     save_json,
+    save_oof_predictions,
     save_submission,
 )
 from .text import build_preprocessor
@@ -137,7 +138,12 @@ class AnalysisPipeline:
             models.append(model)
 
         test_prediction = np.mean(test_preds, axis=0)
-        feature_importance = compute_linear_importance(models, self.features.word_vectorizer, self.features.char_vectorizer, self.config.top_n_features_display)
+        feature_importance = compute_linear_importance(
+            models,
+            self.features.word_vectorizer,
+            self.features.char_vectorizer,
+            self.config.top_n_features_display,
+        )
 
         duration = time.time() - start
         LOGGER.info("Analysis completed in %.2fs", duration)
@@ -153,6 +159,20 @@ class AnalysisPipeline:
             row_ids,
             test_prediction,
             id_column=self.config.id_column,
+            label_column=self.config.label_column,
+        )
+        train_ids = (
+            bundle.train[self.config.id_column].values
+            if self.config.id_column and self.config.id_column in bundle.train
+            else np.arange(len(bundle.train))
+        )
+        oof_path = self.artifacts.artifacts_dir / "oof_predictions.csv"
+        save_oof_predictions(
+            oof_path,
+            train_ids,
+            y,
+            oof,
+            id_column=self.config.id_column or "row_id",
             label_column=self.config.label_column,
         )
         save_dashboard(dashboard_path, metrics)

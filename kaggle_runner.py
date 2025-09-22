@@ -74,7 +74,19 @@ def _build_config(args: argparse.Namespace) -> AnalysisConfig:
     if args.normalizer:
         overrides["normalizer"] = args.normalizer
     if args.vectorizer:
-        overrides["vectorizer"] = args.vectorizer
+        normalized_vectorizer = args.vectorizer.lower()
+        char_modes = {
+            "tfidf_char": "tfidf_char",
+            "tfidf_char_wb": "tfidf_char_wb",
+            "tfidf_word_char_union": "tfidf_word_char_union",
+        }
+        if normalized_vectorizer in {"tfidf", "hashing", "hashing_tfidf", "cuml"}:
+            overrides["vectorizer"] = normalized_vectorizer
+        elif normalized_vectorizer in char_modes:
+            overrides["vectorizer"] = "tfidf"
+            overrides["vectorizer_mode"] = char_modes[normalized_vectorizer]
+        else:
+            overrides["vectorizer"] = args.vectorizer
     if args.n_splits:
         overrides["n_splits_max"] = args.n_splits
     if args.max_features:
@@ -94,13 +106,20 @@ def _build_config(args: argparse.Namespace) -> AnalysisConfig:
     return base_config.with_overrides(overrides)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Ultimate Pipeline on Kaggle datasets")
     parser.add_argument("--config", type=str, help="Path to custom YAML/JSON config file")
     parser.add_argument("--performance-mode", type=str, help="Performance profile override")
     parser.add_argument("--calibration", type=str, help="Calibration strategy override")
     parser.add_argument("--normalizer", type=str, help="Text normalizer override")
-    parser.add_argument("--vectorizer", type=str, help="Vectorizer override")
+    parser.add_argument(
+        "--vectorizer",
+        type=str,
+        help=(
+            "Vectorizer override (e.g. 'tfidf', 'tfidf_char_wb', 'tfidf_word_char_union', "
+            "'hashing')"
+        ),
+    )
     parser.add_argument("--n-splits", type=int, help="Number of CV splits to use")
     parser.add_argument("--max-features", type=int, help="Maximum TF-IDF features")
     parser.add_argument("--n-jobs", type=int, help="Parallel jobs for estimators", default=None)
@@ -114,11 +133,17 @@ def parse_args() -> argparse.Namespace:
         help="Destination path for the submission.csv copy",
         default=str((KAGGLE_WORKING if KAGGLE_WORKING.exists() else PROJECT_ROOT) / "submission.csv"),
     )
-    return parser.parse_args()
+    args, unknown = parser.parse_known_args(argv)
+    if unknown:
+        print(
+            "Ignoring unrecognized arguments: " + " ".join(unknown),
+            file=sys.stderr,
+        )
+    return args
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: Optional[list[str]] = None) -> None:
+    args = parse_args(argv)
     config = _build_config(args)
     pipeline = AnalysisPipeline(config)
     bundle = _resolve_dataset_paths(config, args)
@@ -131,7 +156,17 @@ def main() -> None:
 
     print(f"Submission saved to {final_submission.resolve()}")
     if result.metrics:
-        print("Final fold AUC:", result.metrics[-1].auc)
+        mean_auc = sum(m.auc for m in result.metrics) / len(result.metrics)
+        print("Mean CV AUC:", round(mean_auc, 6))
+        print("Last fold AUC:", round(result.metrics[-1].auc, 6))
+
+    oof_src = pipeline.artifacts.artifacts_dir / "oof_predictions.csv"
+    if oof_src.exists():
+        oof_target_root = KAGGLE_WORKING if KAGGLE_WORKING.exists() else PROJECT_ROOT
+        oof_target = oof_target_root / "oof_predictions.csv"
+        oof_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(oof_src, oof_target)
+        print(f"OOF predictions saved to {oof_target.resolve()}")
 
 
 if __name__ == "__main__":
