@@ -35,9 +35,6 @@ class Calibrator:
 class _IdentityCalibrator:
     clip: float
 
-    def __post_init__(self) -> None:
-        self.clip = float(self.clip)
-
     def fit(self, model):
         self._model = model
         return self
@@ -50,9 +47,6 @@ class _IdentityCalibrator:
 @dataclass
 class _IsotonicCalibrator:
     clip: float
-
-    def __post_init__(self) -> None:
-        self.clip = float(self.clip)
 
     def fit(self, model, X_val, y_val):
         raw = model.predict_proba(X_val)[:, 1]
@@ -71,9 +65,6 @@ class _IsotonicCalibrator:
 @dataclass
 class _SigmoidCalibrator:
     clip: float
-
-    def __post_init__(self) -> None:
-        self.clip = float(self.clip)
 
     def fit(self, model, X_val, y_val):
         calibrator = CalibratedClassifierCV(model, cv="prefit", method="sigmoid")

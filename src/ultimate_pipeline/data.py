@@ -22,14 +22,16 @@ class DatasetBundle:
 
 
 def _discover_file(base_dirs: list[Path], filename: str) -> Optional[Path]:
+    search_paths = []
     for base in base_dirs:
-        candidate = base / filename
+        search_paths.append(base / filename)
+    for base in base_dirs:
+        for child in base.glob("*/"):
+            search_paths.append(child / filename)
+
+    for candidate in search_paths:
         if candidate.exists():
             return candidate
-        for child in base.glob("*/"):
-            candidate = child / filename
-            if candidate.exists():
-                return candidate
     return None
 
 
