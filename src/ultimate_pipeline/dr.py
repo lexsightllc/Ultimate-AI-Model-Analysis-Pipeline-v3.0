@@ -63,12 +63,10 @@ class DimensionalityReducer(BaseEstimator, TransformerMixin):
 
         if target_components <= probe_components:
             if target_components < probe_components:
-                probe_svd.components_ = probe_svd.components_[:target_components]
-                probe_svd.explained_variance_ = probe_svd.explained_variance_[:target_components]
-                probe_svd.explained_variance_ratio_ = probe_svd.explained_variance_ratio_[:target_components]
-                probe_svd.singular_values_ = probe_svd.singular_values_[:target_components]
-                probe_svd.n_components = target_components
-            self._svd = probe_svd
+                self._svd = TruncatedSVD(n_components=target_components, random_state=self.random_state)
+                self._svd.fit(X)
+            else:
+                self._svd = probe_svd
         else:
             self._svd = TruncatedSVD(n_components=target_components, random_state=self.random_state)
             self._svd.fit(X)

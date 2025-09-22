@@ -40,7 +40,25 @@ class _IdentityCalibrator:
         return self
 
     def predict(self, X) -> np.ndarray:
-        raw = self._model.predict_proba(X)[:, 1]
+        if hasattr(self._model, "predict_proba"):
+            proba = self._model.predict_proba(X)
+            if proba.ndim == 1 or proba.shape[1] == 1:
+                raw = proba.ravel()
+            else:
+                raw = proba[:, 1]
+        elif hasattr(self._model, "decision_function"):
+            decision = self._model.decision_function(X)
+            if decision.ndim == 1:
+                raw = 1.0 / (1.0 + np.exp(-decision))
+            else:
+                stabilized = decision - decision.max(axis=1, keepdims=True)
+                exp_scores = np.exp(stabilized)
+                probs = exp_scores / exp_scores.sum(axis=1, keepdims=True)
+                raw = probs[:, 1] if probs.shape[1] > 1 else probs.ravel()
+        else:
+            raise ValueError(
+                f"Model {type(self._model).__name__} does not support predict_proba or decision_function."
+            )
         return np.clip(raw, self.clip, 1 - self.clip)
 
 
