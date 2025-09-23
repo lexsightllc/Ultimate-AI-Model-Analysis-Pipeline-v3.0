@@ -10,7 +10,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from .metrics import MetricResult, compute_metrics
+from .metrics import MetricResult, calibration_curve_fixed_bins, compute_metrics
 
 
 @dataclass
@@ -22,6 +22,7 @@ class CalibrationBin:
     count: int
     accuracy: float
     confidence: float
+    weight: float
 
     def as_dict(self) -> dict[str, float | int]:  # pragma: no cover - convenience helper
         return {
@@ -30,6 +31,7 @@ class CalibrationBin:
             "count": self.count,
             "accuracy": self.accuracy,
             "confidence": self.confidence,
+            "weight": self.weight,
         }
 
 
@@ -63,41 +65,36 @@ class EvaluationSummary:
 def _build_calibration_table(
     y_true: np.ndarray, y_pred: np.ndarray, *, n_bins: int
 ) -> List[CalibrationBin]:
-    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    mean_pred, frac_pos, counts, weights, edges = calibration_curve_fixed_bins(y_true, y_pred, n_bins)
     bins: List[CalibrationBin] = []
-    for lower, upper in zip(edges[:-1], edges[1:]):
-        mask = (y_pred >= lower) & (y_pred < upper)
-        count = int(mask.sum())
+    for idx in range(len(edges) - 1):
+        lower = float(edges[idx])
+        upper = float(edges[idx + 1])
+        count = int(counts[idx])
         if count == 0:
             accuracy = float("nan")
             confidence = float("nan")
         else:
-            accuracy = float(y_true[mask].mean())
-            confidence = float(y_pred[mask].mean())
+            accuracy = float(frac_pos[idx])
+            confidence = float(mean_pred[idx])
         bins.append(
             CalibrationBin(
-                lower=float(lower),
-                upper=float(upper),
+                lower=lower,
+                upper=upper,
                 count=count,
                 accuracy=accuracy,
                 confidence=confidence,
+                weight=float(weights[idx]),
             )
         )
     if bins:
-        final_mask = (y_pred >= bins[-1].lower) & (y_pred <= 1.0)
-        count = int(final_mask.sum())
-        if count == 0:
-            accuracy = float("nan")
-            confidence = float("nan")
-        else:
-            accuracy = float(y_true[final_mask].mean())
-            confidence = float(y_pred[final_mask].mean())
         bins[-1] = CalibrationBin(
             lower=bins[-1].lower,
             upper=1.0,
-            count=count,
-            accuracy=accuracy,
-            confidence=confidence,
+            count=bins[-1].count,
+            accuracy=bins[-1].accuracy,
+            confidence=bins[-1].confidence,
+            weight=bins[-1].weight,
         )
     return bins
 

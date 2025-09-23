@@ -33,7 +33,7 @@ def _write_json(path: Path, summary: EvaluationSummary) -> None:
 def _write_calibration(path: Path, summary: EvaluationSummary) -> None:
     import csv
 
-    fieldnames = ["lower", "upper", "count", "accuracy", "confidence"]
+    fieldnames = ["lower", "upper", "count", "accuracy", "confidence", "weight"]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
