@@ -1,0 +1,37 @@
+preprocessing:
+  lowercase: true
+  remove_punctuation: false
+  remove_urls: true
+  remove_mentions: true
+  remove_numbers: false
+  normalize_whitespace: true
+  remove_stopwords: false
+  min_word_length: 1
+  max_word_length: 50
+  handle_emojis: convert
+vectorizer:
+  type: tfidf
+  max_features: 20000
+  ngram_range: [1, 3]
+  min_df: 1
+  max_df: 0.98
+  use_char_ngrams: true
+  char_ngram_range: [3, 6]
+  sublinear_tf: true
+model:
+  type: gbm
+  use_class_weights: true
+  calibration_method: sigmoid
+  max_iter: 2000
+  random_state: 42
+  n_estimators: 200
+training:
+  n_splits: 7
+  stratify: true
+  validation_size: 0.2
+  early_stopping: true
+  patience: 5
+performance_mode: enhance
+output_dir: runs
+competition_name: jigsaw-agile-community-rules
+debug: false
