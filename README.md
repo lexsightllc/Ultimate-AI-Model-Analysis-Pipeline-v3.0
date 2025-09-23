@@ -8,6 +8,7 @@ The Ultimate AI Model Analysis Pipeline is an end-to-end framework for training,
 - **Rich text feature engineering** – [`FeatureAssembler`](src/ultimate_pipeline/features.py) combines normalisation, word- and character-level TF-IDF vectorisers, optional hashing, and dimensionality reduction via [`DimensionalityReducer`](src/ultimate_pipeline/dr.py).
 - **Robust validation tooling** – [`CrossValidatorFactory`](src/ultimate_pipeline/cv.py) dynamically selects Stratified, Group, or StratifiedGroup K-Folds based on the data.
 - **Advanced metrics and reporting** – [`compute_metrics`](src/ultimate_pipeline/metrics.py) tracks AUC, Brier score, log loss, and Expected Calibration Error (ECE); [`reporting`](src/ultimate_pipeline/reporting.py) persists HTML dashboards, JSON summaries, and CSV submissions.
+- **Post-hoc evaluation CLI** – [`ultimate-pipeline-evaluate`](src/ultimate_pipeline/evaluate_cli.py) computes AUC, Brier score, ECE, and calibration tables from any CSV containing labels and predictions.
 - **Flexible calibration** – [`Calibrator`](src/ultimate_pipeline/calibration.py) supports isotonic, sigmoid, or identity calibration strategies with probability clipping safeguards.
 - **Reproducible execution** – Every module respects the configured random seed, and [`data.generate_synthetic_data`](src/ultimate_pipeline/data.py) ensures deterministic fallback datasets when real data are unavailable.
 
@@ -63,6 +64,21 @@ src/ultimate_pipeline/
    - `reports/dashboard.html` – tabular dashboard of metrics and calibration diagnostics
    - `submission.csv` – averaged test-set predictions aligned with `row_id`
    - Cached feature matrices and intermediate assets (if caching is enabled)
+
+### Evaluate saved predictions
+
+When you already have out-of-fold predictions or model outputs saved to disk, the dedicated evaluation CLI can compute the same metrics and calibration diagnostics used by the full pipeline:
+
+```bash
+ultimate-pipeline-evaluate path/to/oof_predictions.csv \
+  --label-col rule_violation \
+  --prediction-col prediction \
+  --ece-bins 15 \
+  --output-json reports/evaluation_summary.json \
+  --calibration-csv reports/calibration_bins.csv
+```
+
+The command prints AUC, Brier score, and Expected Calibration Error to the console while optionally exporting the full summary and calibration table for further analysis.
 
 ## Configuration workflow
 
