@@ -15,9 +15,11 @@ The Ultimate AI Model Analysis Pipeline is an end-to-end framework for training,
 
 ```
 configs/            # Default YAML configurations
+configs/multilabel/ # Ready-to-use configs for the Kaggle community rules task
 src/ultimate_pipeline/
   cli.py            # Command line entrypoint (exposed as `ultimate-pipeline` script)
   pipeline.py       # End-to-end orchestration of feature building, CV, training, and reporting
+  multilabel/       # Dedicated multi-label pipeline for Kaggle experiments
   data.py           # Dataset discovery plus synthetic data generation
   features.py       # Text preprocessing, TF-IDF assembly, caching utilities
   models.py         # Estimator factory with LogisticRegression, SGD, and LinearSVC options
@@ -44,6 +46,16 @@ src/ultimate_pipeline/
    ultimate-pipeline --performance-mode balanced --output-config runs/latest_config.json
    ```
    The CLI accepts overrides for calibration, vectorisers, dimensionality reduction, and more. Use `ultimate-pipeline --help` to see the full list of switches.
+
+   To reproduce the Kaggle community rules experiments from the analysis write-up,
+   a standalone multi-label runner is available:
+
+   ```bash
+   python -m ultimate_pipeline.multilabel.pipeline --config configs/multilabel/baseline.yaml
+   ```
+
+   Switch between performance profiles using `--performance-mode` and override
+   model choices with `--model-type`, `--calibration`, or `--max-features` as needed.
 
 4. **Review outputs**
    Each run creates a timestamped directory inside `runs/` containing:
