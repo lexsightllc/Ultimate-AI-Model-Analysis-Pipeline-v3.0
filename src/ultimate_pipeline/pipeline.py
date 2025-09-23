@@ -35,6 +35,7 @@ class PipelineResult:
     test_predictions: np.ndarray
     feature_importance: FeatureImportanceResult
     cv_strategy: str
+    duration: float
 
 
 class AnalysisPipeline:
@@ -192,6 +193,7 @@ class AnalysisPipeline:
             test_predictions=test_prediction,
             feature_importance=feature_importance,
             cv_strategy=strategy,
+            duration=duration,
         )
 
 
