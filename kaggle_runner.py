@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -16,17 +17,70 @@ try:
     PROJECT_ROOT = Path(__file__).resolve().parent
 except NameError:  # pragma: no cover - environment dependent
     PROJECT_ROOT = Path.cwd().resolve()
-SRC_ROOT = PROJECT_ROOT / "src"
-if SRC_ROOT.exists():
-    sys.path.insert(0, str(SRC_ROOT))
-
-from ultimate_pipeline.config import AnalysisConfig, load_default_config
-from ultimate_pipeline.pipeline import AnalysisPipeline
-from ultimate_pipeline.data import DatasetBundle, load_custom_datasets
 
 KAGGLE_WORKING = Path("/kaggle/working")
 DEFAULT_CODE_DATASET = Path("/kaggle/input/ultimate-ai-model-analysis-pipeline-v3-0")
 DEFAULT_COMP_DATASET = Path("/kaggle/input/jigsaw-agile-community-rules")
+
+
+def _ensure_code_on_sys_path() -> list[str]:
+    attempted: list[str] = []
+    seen_attempted: set[str] = set()
+    seen_sys_path: set[str] = set(sys.path)
+
+    def _register_path(path: Path) -> None:
+        path_str = str(path)
+        if path_str not in seen_sys_path:
+            sys.path.insert(0, path_str)
+            seen_sys_path.add(path_str)
+
+    candidates: list[Path] = []
+    env_src = os.environ.get("ULTIMATE_PIPELINE_SRC")
+    if env_src:
+        candidates.append(Path(env_src).expanduser())
+    candidates.extend(
+        [
+            PROJECT_ROOT,
+            Path.cwd(),
+            KAGGLE_WORKING,
+            DEFAULT_CODE_DATASET,
+        ]
+    )
+
+    for candidate in candidates:
+        resolved = str(candidate.resolve(strict=False))
+        if resolved not in seen_attempted:
+            attempted.append(resolved)
+            seen_attempted.add(resolved)
+        _register_path(candidate / "src")
+        _register_path(candidate)
+        if candidate.exists():
+            for wheel in sorted(candidate.rglob("*.whl")):
+                _register_path(wheel)
+
+    return attempted
+
+
+_ATTEMPTED_CODE_PATHS = _ensure_code_on_sys_path()
+
+try:
+    from ultimate_pipeline.config import AnalysisConfig, load_default_config
+    from ultimate_pipeline.pipeline import AnalysisPipeline
+    from ultimate_pipeline.data import DatasetBundle, load_custom_datasets
+except ModuleNotFoundError as exc:
+    if exc.name and not exc.name.startswith("ultimate_pipeline"):
+        raise
+    if _ATTEMPTED_CODE_PATHS:
+        checked_locations = "\n  - " + "\n  - ".join(_ATTEMPTED_CODE_PATHS)
+    else:
+        checked_locations = ""
+    message = (
+        "Unable to import 'ultimate_pipeline'. Checked the following locations:"
+        f"{checked_locations}\n"
+        "Set the ULTIMATE_PIPELINE_SRC environment variable or attach the "
+        "Ultimate Pipeline code dataset."
+    )
+    raise SystemExit(message) from exc
 
 
 def _default_output_dir() -> Path:
