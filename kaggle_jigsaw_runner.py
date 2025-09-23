@@ -56,6 +56,8 @@ from sklearn.preprocessing import OneHotEncoder
 # ----------------------- Paths & env defaults -----------------------
 
 KAGGLE_WORKING = Path("/kaggle/working")
+# Ensure the working directory exists even outside Kaggle notebooks.
+KAGGLE_WORKING.mkdir(parents=True, exist_ok=True)
 COMP_DIR = Path("/kaggle/input/jigsaw-agile-community-rules")
 
 DEFAULT_TRAIN = COMP_DIR / "train.csv"
@@ -320,7 +322,7 @@ def cross_validate(df: pd.DataFrame,
         model = base
         if use_cal and X_cal is not None:
             # Calibrate a prefit model using only the inner calibration chunk
-            calibrated = CalibratedClassifierCV(base_estimator=model, method="isotonic" if calibration.lower() == "isotonic" else "sigmoid", cv="prefit")
+            calibrated = CalibratedClassifierCV(estimator=model, method="isotonic" if calibration.lower() == "isotonic" else "sigmoid", cv="prefit")
             # Fit on the SAME pipeline object; it will call predict_proba/decision_function of the base
             calibrated.fit(X_cal, y_cal)
             model = calibrated
@@ -401,7 +403,7 @@ def fit_full_and_predict(train_df: pd.DataFrame,
 
     model = base
     if use_cal and X_cal is not None:
-        calibrated = CalibratedClassifierCV(base_estimator=model, method="isotonic" if calibration.lower() == "isotonic" else "sigmoid", cv="prefit")
+        calibrated = CalibratedClassifierCV(estimator=model, method="isotonic" if calibration.lower() == "isotonic" else "sigmoid", cv="prefit")
         calibrated.fit(X_cal, y_cal)
         model = calibrated
 
