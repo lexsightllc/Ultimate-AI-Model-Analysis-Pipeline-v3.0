@@ -19,3 +19,4 @@ dependencies = [
 
 [project.scripts]
 ultimate-pipeline = "ultimate_pipeline.cli:main"
+ultimate-pipeline-evaluate = "ultimate_pipeline.evaluate_cli:main"
