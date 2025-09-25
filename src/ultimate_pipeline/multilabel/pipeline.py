@@ -534,7 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--n-splits", type=int, help="Cross-validation folds")
     parser.add_argument("--max-features", type=int, help="TF-IDF feature cap")
     parser.add_argument("--model-type", type=str, choices=["logistic", "rf", "gbm"])
-    parser.add_argument("--calibration", type=str, choices=["none", "sigmoid", "isotonic"])
+    parser.add_argument("--calibration", type=str, choices=["none", "sigmoid", "isotonic", "temperature"])
     parser.add_argument("--debug", action="store_true", help="Enable verbose logging")
     parser.add_argument("--output-config", type=str, help="Optional path to save resolved config")
     return parser

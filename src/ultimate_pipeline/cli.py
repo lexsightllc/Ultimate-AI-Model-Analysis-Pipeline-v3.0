@@ -14,14 +14,26 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ultimate AI Model Analysis Pipeline")
     parser.add_argument("--config", type=str, help="Path to a YAML/JSON configuration file", default=None)
     parser.add_argument("--performance-mode", type=str, help="Performance profile (balanced|max_speed|best_accuracy)")
-    parser.add_argument("--calibration", type=str, help="Calibration method (isotonic|sigmoid|none)")
+    parser.add_argument(
+        "--calibration",
+        type=str,
+        help="Calibration method (isotonic|sigmoid|temperature|none)",
+    )
     parser.add_argument("--normalizer", type=str, help="Text normalizer (regex|spacy|none)")
     parser.add_argument("--vectorizer", type=str, help="Vectorizer backend (tfidf|hashing|cuml)")
     parser.add_argument("--n-splits", type=int, help="Number of CV splits")
     parser.add_argument("--max-features", type=int, help="Maximum TF-IDF features")
-    parser.add_argument("--dim-reduction", type=str, help="Dimensionality reduction strategy (svd|none)")
-    parser.add_argument("--components", type=int, help="Number of SVD components")
-    parser.add_argument("--explained-variance", type=float, help="Target explained variance for SVD")
+    parser.add_argument(
+        "--dim-reduction",
+        type=str,
+        help="Dimensionality reduction strategy (svd|pca|umap|none)",
+    )
+    parser.add_argument("--components", type=int, help="Number of components for dimensionality reduction")
+    parser.add_argument(
+        "--explained-variance",
+        type=float,
+        help="Target explained variance for SVD/PCA backends",
+    )
     parser.add_argument("--n-jobs", type=int, help="Parallel jobs for estimators")
     parser.add_argument("--output-config", type=str, help="Path to dump the resolved configuration", default=None)
     parser.add_argument("--text-cols", nargs="+", help="Text columns to use for modelling")
