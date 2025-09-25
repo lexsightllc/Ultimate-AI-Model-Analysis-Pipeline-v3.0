@@ -121,6 +121,14 @@ class AnalysisConfig:
             raise TypeError("group_column must be a string or None")
         if isinstance(self.dimensionality_reduction, str) and self.dimensionality_reduction.lower() == "none":
             self.dimensionality_reduction = None
+        elif isinstance(self.dimensionality_reduction, str):
+            method = self.dimensionality_reduction.lower()
+            valid_methods = {"svd", "truncated_svd", "pca", "umap"}
+            if method not in valid_methods:
+                raise ValueError(
+                    "dimensionality_reduction must be one of {'svd','truncated_svd','pca','umap','none'}"
+                )
+            self.dimensionality_reduction = method
         if self.dimensionality_reduction_components is not None:
             self.dimensionality_reduction_components = int(self.dimensionality_reduction_components)
         if self.explained_variance is not None:

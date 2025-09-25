@@ -91,6 +91,7 @@ class FeatureAssembler:
         self.reducer: Optional[DimensionalityReducer] = None
         if self.config.dimensionality_reduction:
             self.reducer = DimensionalityReducer(
+                method=self.config.dimensionality_reduction,
                 n_components=self.config.dimensionality_reduction_components,
                 explained_variance=self.config.explained_variance,
                 random_state=self.config.seed,

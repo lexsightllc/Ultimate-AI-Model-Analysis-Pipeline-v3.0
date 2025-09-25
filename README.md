@@ -9,7 +9,7 @@ The Ultimate AI Model Analysis Pipeline is an end-to-end framework for training,
 - **Robust validation tooling** – [`CrossValidatorFactory`](src/ultimate_pipeline/cv.py) dynamically selects Stratified, Group, or StratifiedGroup K-Folds based on the data.
 - **Advanced metrics and reporting** – [`compute_metrics`](src/ultimate_pipeline/metrics.py) tracks AUC, Brier score, log loss, and Expected Calibration Error (ECE); [`reporting`](src/ultimate_pipeline/reporting.py) persists HTML dashboards, JSON summaries, and CSV submissions.
 - **Post-hoc evaluation CLI** – [`ultimate-pipeline-evaluate`](src/ultimate_pipeline/evaluate_cli.py) computes AUC, Brier score, ECE, and calibration tables from any CSV containing labels and predictions.
-- **Flexible calibration** – [`Calibrator`](src/ultimate_pipeline/calibration.py) supports isotonic, sigmoid, or identity calibration strategies with probability clipping safeguards.
+- **Flexible calibration** – [`Calibrator`](src/ultimate_pipeline/calibration.py) supports isotonic, sigmoid, temperature-scaling, or identity calibration strategies with probability clipping safeguards.
 - **Reproducible execution** – Every module respects the configured random seed, and [`data.generate_synthetic_data`](src/ultimate_pipeline/data.py) ensures deterministic fallback datasets when real data are unavailable.
 
 ## Project layout
@@ -91,8 +91,10 @@ Key toggles:
 | Requirement | Configuration knobs | Implementation |
 |-------------|---------------------|----------------|
 | Performance profiles | `performance_mode` (`balanced`, `max_speed`, `best_accuracy`) | [`AnalysisConfig._apply_performance_mode`](src/ultimate_pipeline/config.py) |
-| Calibration strategies | `calibration_enabled`, `calibration_method`, `epsilon_prob_clip` | [`Calibrator`](src/ultimate_pipeline/calibration.py) |
-| Dimensionality reduction | `dimensionality_reduction`, `dimensionality_reduction_components`, `explained_variance` | [`DimensionalityReducer`](src/ultimate_pipeline/dr.py) |
+| Calibration strategies | `calibration_enabled`, `calibration_method`, `epsilon_prob_clip` | [`Calibrator`](src/ultimate_pipeline/calibration.py) – supports `isotonic`, `sigmoid`, `temperature`, or `none` |
+| Dimensionality reduction | `dimensionality_reduction`, `dimensionality_reduction_components`, `explained_variance` | [`DimensionalityReducer`](src/ultimate_pipeline/dr.py) – supports `svd`, `pca`, and `umap`<sup>†</sup> |
+
+<sup>†</sup>UMAP support depends on the optional `umap-learn` package. Install it with `pip install umap-learn` to enable the manifold reducer.
 | Cross-validation strategy | `n_splits_max`, dataset-derived groups | [`CrossValidatorFactory`](src/ultimate_pipeline/cv.py) |
 | Feature engineering | `normalizer`, `vectorizer`, `max_tfidf_features`, TF-IDF parameter blocks | [`FeatureAssembler`](src/ultimate_pipeline/features.py) |
 | Model selection | `use_sgd` or explicit `--performance-mode` | [`ModelFactory`](src/ultimate_pipeline/models.py) |
