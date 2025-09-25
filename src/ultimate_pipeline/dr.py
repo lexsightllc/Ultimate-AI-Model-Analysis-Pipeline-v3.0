@@ -9,6 +9,8 @@ import numpy as np
 from scipy import sparse
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.decomposition import PCA, TruncatedSVD
+from sklearn.manifold import trustworthiness
+from sklearn.neighbors import NearestNeighbors
 
 try:  # pragma: no cover - optional dependency
     import umap  # type: ignore
@@ -44,6 +46,7 @@ class DimensionalityReducer(BaseEstimator, TransformerMixin):
     umap_n_neighbors: int = 15
     umap_min_dist: float = 0.1
     umap_metric: str = "euclidean"
+    quality_metrics_: Optional[dict] = None
 
     def __post_init__(self) -> None:
         method = (self.method or "svd").lower()
@@ -56,6 +59,7 @@ class DimensionalityReducer(BaseEstimator, TransformerMixin):
                     "Specify n_components or explained_variance for dimensionality reduction."
                 )
         self._estimator = None
+        self._pca_whitener = None
 
     # ------------------------------------------------------------------
     # Fitting utilities
@@ -81,8 +85,18 @@ class DimensionalityReducer(BaseEstimator, TransformerMixin):
             return self._estimator.transform(dense)
         if self.method == "umap":
             dense = _ensure_dense(X)
+            if self._pca_whitener is not None:
+                dense = self._pca_whitener.transform(dense)
             return self._estimator.transform(dense)
         raise RuntimeError(f"Unsupported method: {self.method}")  # pragma: no cover
+
+    def fit_transform(self, X, y=None):
+        embedding = super().fit_transform(X, y) if hasattr(super(), "fit_transform") else None
+        if embedding is None:
+            self.fit(X, y)
+            embedding = self.transform(X)
+        self.quality_metrics_ = self._compute_quality_metrics(X, embedding)
+        return embedding
 
     # ------------------------------------------------------------------
     # Backend-specific helpers
@@ -148,6 +162,12 @@ class DimensionalityReducer(BaseEstimator, TransformerMixin):
             raise ImportError("umap-learn is required when using the 'umap' dimensionality reduction method.")
         dense = _ensure_dense(X)
         n_components = self.n_components or 2
+        if dense.shape[1] > 0:
+            pca_components = min(dense.shape[1], max(10, n_components * 3))
+            self._pca_whitener = PCA(n_components=pca_components, whiten=True, random_state=self.random_state)
+            dense = self._pca_whitener.fit_transform(dense)
+        else:
+            self._pca_whitener = None
         estimator = umap.UMAP(
             n_components=n_components,
             n_neighbors=self.umap_n_neighbors,
@@ -157,3 +177,50 @@ class DimensionalityReducer(BaseEstimator, TransformerMixin):
         )
         estimator.fit(dense)
         self._estimator = estimator
+
+    def _compute_quality_metrics(self, X, embedding) -> Optional[dict]:
+        try:
+            dense = _ensure_dense(X)
+            emb = np.asarray(embedding)
+            n_samples = dense.shape[0]
+            if n_samples <= 2 or emb.shape[0] != n_samples:
+                return None
+            n_neighbors = min(10, n_samples - 1)
+            trust = trustworthiness(dense, emb, n_neighbors=n_neighbors)
+            continuity = _continuity(dense, emb, n_neighbors)
+            overlap = _knn_overlap(dense, emb, n_neighbors)
+            return {
+                "trustworthiness": float(trust),
+                "continuity": float(continuity),
+                "knn_overlap": float(overlap),
+            }
+        except Exception:  # pragma: no cover - diagnostics best effort
+            return None
+
+
+def _knn_indices(matrix: np.ndarray, n_neighbors: int) -> np.ndarray:
+    nn = NearestNeighbors(n_neighbors=n_neighbors + 1)
+    nn.fit(matrix)
+    indices = nn.kneighbors(return_distance=False)[:, 1:]
+    return indices
+
+
+def _knn_overlap(X_high: np.ndarray, X_low: np.ndarray, n_neighbors: int) -> float:
+    high_idx = _knn_indices(X_high, n_neighbors)
+    low_idx = _knn_indices(X_low, n_neighbors)
+    overlaps = []
+    for high, low in zip(high_idx, low_idx):
+        overlap = len(set(high).intersection(low)) / n_neighbors
+        overlaps.append(overlap)
+    return float(np.mean(overlaps)) if overlaps else float("nan")
+
+
+def _continuity(X_high: np.ndarray, X_low: np.ndarray, n_neighbors: int) -> float:
+    high_idx = _knn_indices(X_high, n_neighbors)
+    low_idx = _knn_indices(X_low, n_neighbors)
+    scores = []
+    for high, low in zip(high_idx, low_idx):
+        high_set = set(high)
+        retained = len(high_set.intersection(low)) / n_neighbors
+        scores.append(retained)
+    return float(np.mean(scores)) if scores else float("nan")

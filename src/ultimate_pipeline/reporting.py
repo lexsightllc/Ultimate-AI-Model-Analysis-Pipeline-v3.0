@@ -20,10 +20,11 @@ class RunArtifacts:
     models_dir: Path
     reports_dir: Path
     artifacts_dir: Path
+    run_id: str
 
 
-def prepare_run_directory(base_dir: Path) -> RunArtifacts:
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+def prepare_run_directory(base_dir: Path, run_id: str | None = None) -> RunArtifacts:
+    timestamp = run_id or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     run_dir = base_dir / timestamp
     cache_dir = run_dir / "cache"
     models_dir = run_dir / "models"
@@ -31,7 +32,7 @@ def prepare_run_directory(base_dir: Path) -> RunArtifacts:
     artifacts_dir = run_dir / "artifacts"
     for path in [run_dir, cache_dir, models_dir, reports_dir, artifacts_dir]:
         path.mkdir(parents=True, exist_ok=True)
-    return RunArtifacts(run_dir, cache_dir, models_dir, reports_dir, artifacts_dir)
+    return RunArtifacts(run_dir, cache_dir, models_dir, reports_dir, artifacts_dir, timestamp)
 
 
 def save_json(path: Path, payload: Dict[str, Any]) -> None:
@@ -79,8 +80,31 @@ def save_submission(
     *,
     id_column: str = "row_id",
     label_column: str = "rule_violation",
+    class_labels: np.ndarray | None = None,
 ) -> None:
-    df = pd.DataFrame({id_column: row_ids, label_column: predictions})
+    preds = np.asarray(predictions)
+    columns: Dict[str, np.ndarray] = {id_column: row_ids}
+    if preds.ndim == 1:
+        columns[label_column] = preds
+    else:
+        label_array = np.asarray(class_labels) if class_labels is not None else np.arange(preds.shape[1])
+        labels = label_array
+        if preds.shape[1] == 2:
+            # Preserve compatibility with binary competitions by writing the positive class only.
+            positive_index = 1
+            if class_labels is not None:
+                try:
+                    positive_index = int(np.where(label_array == 1)[0][0])
+                except Exception:  # pragma: no cover - fallback when label 1 missing
+                    positive_index = preds.shape[1] - 1
+                columns[label_column] = preds[:, positive_index]
+            else:
+                columns[label_column] = preds[:, positive_index]
+        else:
+            for idx in range(preds.shape[1]):
+                name = f"{label_column}_{labels[idx]}"
+                columns[name] = preds[:, idx]
+    df = pd.DataFrame(columns)
     df.to_csv(path, index=False)
 
 
@@ -92,12 +116,15 @@ def save_oof_predictions(
     *,
     id_column: str = "row_id",
     label_column: str = "rule_violation",
+    class_labels: np.ndarray | None = None,
 ) -> None:
-    df = pd.DataFrame(
-        {
-            id_column: row_ids,
-            label_column: y_true,
-            "prediction": predictions,
-        }
-    )
+    preds = np.asarray(predictions)
+    payload: Dict[str, Any] = {id_column: row_ids, label_column: y_true}
+    if preds.ndim == 1:
+        payload["prediction"] = preds
+    else:
+        labels = np.asarray(class_labels) if class_labels is not None else np.arange(preds.shape[1])
+        for idx in range(preds.shape[1]):
+            payload[f"prediction_{labels[idx]}"] = preds[:, idx]
+    df = pd.DataFrame(payload)
     df.to_csv(path, index=False)

@@ -10,7 +10,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from .metrics import MetricResult, calibration_curve_fixed_bins, compute_metrics
+from .metrics import CalibrationCurveResult, MetricResult, compute_metrics, expected_calibration_error
 
 
 @dataclass
@@ -23,6 +23,9 @@ class CalibrationBin:
     accuracy: float
     confidence: float
     weight: float
+    delta: float
+    lower_ci: float
+    upper_ci: float
 
     def as_dict(self) -> dict[str, float | int]:  # pragma: no cover - convenience helper
         return {
@@ -32,6 +35,9 @@ class CalibrationBin:
             "accuracy": self.accuracy,
             "confidence": self.confidence,
             "weight": self.weight,
+            "delta": self.delta,
+            "lower_ci": self.lower_ci,
+            "upper_ci": self.upper_ci,
         }
 
 
@@ -63,9 +69,15 @@ class EvaluationSummary:
 
 
 def _build_calibration_table(
-    y_true: np.ndarray, y_pred: np.ndarray, *, n_bins: int
+    curve: CalibrationCurveResult,
 ) -> List[CalibrationBin]:
-    mean_pred, frac_pos, counts, weights, edges = calibration_curve_fixed_bins(y_true, y_pred, n_bins)
+    mean_pred = curve.mean_prediction
+    frac_pos = curve.accuracy
+    counts = curve.counts
+    weights = curve.weights
+    edges = curve.edges
+    lower_ci = curve.lower_ci
+    upper_ci = curve.upper_ci
     bins: List[CalibrationBin] = []
     for idx in range(len(edges) - 1):
         lower = float(edges[idx])
@@ -77,6 +89,7 @@ def _build_calibration_table(
         else:
             accuracy = float(frac_pos[idx])
             confidence = float(mean_pred[idx])
+        delta = float(confidence - accuracy) if count > 0 else float("nan")
         bins.append(
             CalibrationBin(
                 lower=lower,
@@ -85,6 +98,9 @@ def _build_calibration_table(
                 accuracy=accuracy,
                 confidence=confidence,
                 weight=float(weights[idx]),
+                delta=delta,
+                lower_ci=float(lower_ci[idx]),
+                upper_ci=float(upper_ci[idx]),
             )
         )
     if bins:
@@ -95,6 +111,9 @@ def _build_calibration_table(
             accuracy=bins[-1].accuracy,
             confidence=bins[-1].confidence,
             weight=bins[-1].weight,
+            delta=bins[-1].delta,
+            lower_ci=bins[-1].lower_ci,
+            upper_ci=bins[-1].upper_ci,
         )
     return bins
 
@@ -147,7 +166,26 @@ def evaluate_prediction_file(
         y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
 
     metrics = compute_metrics(y_true, y_pred, n_bins)
-    calibration_table = _build_calibration_table(y_true, y_pred, n_bins=n_bins)
+    if metrics.extra.get("calibration_curve"):
+        curve_data = metrics.extra["calibration_curve"]
+        if isinstance(curve_data, dict) and "mean_prediction" in curve_data:
+            curve = CalibrationCurveResult(
+                mean_prediction=np.array(curve_data["mean_prediction"], dtype=float),
+                accuracy=np.array(curve_data["accuracy"], dtype=float),
+                counts=np.array(curve_data["counts"], dtype=float),
+                weights=np.array(curve_data["weights"], dtype=float),
+                edges=np.array(curve_data["edges"], dtype=float),
+                lower_ci=np.array(curve_data["lower_ci"], dtype=float),
+                upper_ci=np.array(curve_data["upper_ci"], dtype=float),
+                bin_strategy=str(curve_data.get("bin_strategy", "equal_mass")),
+                min_count=float(curve_data.get("min_count", 10.0)),
+            )
+        else:
+            _, curve = expected_calibration_error(y_true, y_pred, n_bins)
+    else:
+        _, curve = expected_calibration_error(y_true, y_pred, n_bins)
+
+    calibration_table = _build_calibration_table(curve)
     summary = EvaluationSummary(
         metrics=metrics,
         n_samples=int(len(df)),

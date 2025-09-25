@@ -105,6 +105,10 @@ class AnalysisConfig:
     explained_variance: Optional[float] = None
     cache_dir: Path = Path("runs")
     cache_enabled: bool = True
+    tracker: str = "local"
+    tracker_uri: str | None = None
+    tracker_project: str | None = None
+    run_id: str | None = None
 
     def __post_init__(self) -> None:
         self.text_columns = tuple(self.text_columns)
@@ -147,6 +151,10 @@ class AnalysisConfig:
                 "vectorizer_mode must be one of "
                 "{'word_char','tfidf_char','tfidf_char_wb','tfidf_word_char_union','char_only','word_only'}"
             )
+        if self.run_id is not None:
+            self.run_id = str(self.run_id)
+        if isinstance(self.tracker, str):
+            self.tracker = self.tracker.lower()
 
     @classmethod
     def from_file(cls, path: Path | str) -> "AnalysisConfig":
@@ -203,6 +211,10 @@ class AnalysisConfig:
             "explained_variance": self.explained_variance,
             "cache_dir": str(self.cache_dir),
             "cache_enabled": self.cache_enabled,
+            "tracker": self.tracker,
+            "tracker_uri": self.tracker_uri,
+            "tracker_project": self.tracker_project,
+            "run_id": self.run_id,
         }
 
     def _apply_performance_mode(self) -> "AnalysisConfig":

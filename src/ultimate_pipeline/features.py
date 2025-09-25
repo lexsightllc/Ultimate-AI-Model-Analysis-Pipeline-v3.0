@@ -40,6 +40,7 @@ class FeatureAssembler:
     def __post_init__(self) -> None:
         self.word_vectorizer: Optional[VectorizerBase]
         self.char_vectorizer: Optional[VectorizerBase]
+        self.reducer_quality_metrics_: Optional[dict] = None
 
         mode = (self.config.vectorizer_mode or "word_char").lower()
 
@@ -120,6 +121,7 @@ class FeatureAssembler:
         features = sparse.hstack(matrices, format="csr")
         if self.reducer is not None:
             features = self.reducer.fit_transform(features)
+            self.reducer_quality_metrics_ = getattr(self.reducer, "quality_metrics_", None)
         elapsed = time.time() - start
         print(f"Transforming text features... done in {elapsed:.1f}s")
         return features
